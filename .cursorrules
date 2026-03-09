@@ -1,0 +1,110 @@
+You are an expert Python backend developer working on Bromart — a FastAPI + PostgreSQL
+kiosk ordering system for inmates in Kazakhstan prisons.
+
+## GENERAL PRINCIPLES
+
+### KISS (Keep It Simple, Stupid)
+- Write the simplest solution that works. Avoid over-engineering.
+- Do not add abstractions, layers, or patterns unless they solve a real current problem.
+- Prefer flat and readable code over clever or nested code.
+- Do not create base classes, mixins, or generics unless 3+ concrete cases require it.
+- Avoid premature optimization. Make it work first, then optimize if needed.
+
+### DRY (Don't Repeat Yourself)
+- If the same logic appears in 2+ places, extract it into a shared function or utility.
+- Reuse existing services, dependencies, and utilities — do not duplicate them.
+- Schemas, models, and constants must be defined once and imported everywhere else.
+- Do not copy-paste code blocks — refactor into a shared helper instead.
+
+### SOLID
+- **Single Responsibility:** Each service, function, and module does one thing only.
+  - Services handle business logic only — not HTTP, not DB schema.
+  - Routers handle HTTP only — no business logic inside endpoint functions.
+  - Models define structure only — no methods with business logic.
+- **Open/Closed:** Add new features by adding new code, not by modifying existing working code.
+- **Liskov Substitution:** Not heavily applicable here, but avoid breaking existing interfaces when extending.
+- **Interface Segregation:** Keep dependencies small and specific.
+  - Do not inject the entire User object when only user.id is needed.
+  - Do not pass the full db session where a single query result is enough.
+- **Dependency Inversion:**
+  - Routes depend on services, not on raw DB queries.
+  - Services depend on the db session interface, not on specific DB implementations.
+
+---
+
+## PROJECT-SPECIFIC RULES
+
+### Architecture
+- Always follow the layers-based structure:
+  - `app/models/` — SQLAlchemy models only
+  - `app/schemas/` — Pydantic schemas only
+  - `app/services/` — all business logic
+  - `app/api/v1/endpoints/` — FastAPI routers only
+  - `app/core/` — config, security, dependencies
+- Never put business logic inside routers.
+- Never put raw SQL or DB queries inside routers.
+- Never import routers into services or models.
+
+### FastAPI
+- Always use `Depends()` for auth, DB session, and role guards.
+- Always use `CurrentUserDep` for authenticated routes.
+- Use `require_super_admin`, `require_admin`, `require_inmate`, `require_any_user`
+  for role-based access — never check roles manually inside endpoint functions.
+- Always return responses in the unified format:
+  `{ "success": true/false, "data": <payload>, "message": "..." }`
+
+### SQLAlchemy
+- Always use async SQLAlchemy (AsyncSession, await db.execute()).
+- Never use synchronous DB calls.
+- Always use `select()` for queries, never `db.query()` (that is the old sync API).
+- Use `scalar_one_or_none()` when expecting a single result that may not exist.
+- Use `scalars().all()` for lists.
+
+### Security
+- Never expose hashed_password in any response schema.
+- Always use `verify_password` and `create_access_token` from `app/core/security.py`.
+- Never manually encode/decode JWT outside of `app/core/security.py`.
+- Always enforce facility scoping for PRISON_ADMIN in service layer.
+
+### Schemas
+- Always use separate schemas for Create, Update, and Response.
+- Never reuse the same schema for input and output.
+- Never include sensitive fields (hashed_password, internal flags) in response schemas.
+
+### Error Handling
+- Always raise custom exceptions (AuthenticationError, AuthorizationError,
+  NotFoundError, ValidationError) — never raise raw HTTPException inside services.
+- Let the global error handler convert exceptions to HTTP responses.
+
+### Database
+- PostgreSQL + asyncpg only. Never use SQLite, even for tests.
+- Always run migrations via Alembic. Never use `create_all()` in production code.
+- Always soft-delete users, products, and categories (is_active = False).
+  Never hard-delete these entities.
+
+### Naming Conventions
+- Services: `UserService`, `OrderService`, `WalletService` etc.
+- Endpoints files: `users.py`, `orders.py`, `wallet.py` etc.
+- Schema files: `user.py`, `order.py`, `wallet.py` etc.
+- Dependencies: `CurrentUserDep`, `DBSessionDep`
+- Always use snake_case for variables, functions, files.
+- Always use PascalCase for classes and schemas.
+
+### Code Style
+- Maximum function length: 30 lines. If longer, split into smaller functions.
+- Maximum file length: 200 lines. If longer, split into modules.
+- Always add docstrings to service methods.
+- No commented-out code in commits.
+- No print() statements — use Python logging instead.
+
+---
+
+## WHAT TO AVOID
+
+- No God classes or God services (one service doing everything)
+- No logic in `__init__` files
+- No hardcoded strings — use constants or enums
+- No magic numbers — define them as named constants
+- No nested functions deeper than 2 levels
+- No circular imports
+- No unused imports or variables
