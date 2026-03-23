@@ -1,19 +1,15 @@
 """
-Application lifespan: background migrations, async scheduler, graceful shutdown.
+Application lifespan: async migrations, async scheduler, non-blocking startup.
 
-Все операции при startup выполняются неблокирующе:
-- Миграции запускаются в фоне (asyncio.to_thread) — приложение стартует мгновенно
-- Scheduler (AsyncIOScheduler) работает в том же event loop, не блокирует его
+- Миграции: asyncio.create_subprocess_exec + asyncio.wait_for (таймаут) — не блокируют event loop
+- Scheduler: AsyncIOScheduler, все задачи async — не блокирует startup
 """
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from alembic import command
-from alembic.config import Config
 from fastapi import FastAPI
 
 from app.database import engine, AsyncSessionLocal
@@ -23,27 +19,30 @@ logger = logging.getLogger(__name__)
 
 scheduler: AsyncIOScheduler | None = None
 _migrations_task: asyncio.Task | None = None
-
-
-def _run_migrations_sync() -> None:
-    """
-    Синхронный запуск alembic upgrade head.
-    Вызывается из asyncio.to_thread — не блокирует event loop.
-    """
-    root = Path(__file__).resolve().parent.parent.parent
-    alembic_cfg = Config(str(root / "alembic.ini"))
-    command.upgrade(alembic_cfg, "head")
+MIGRATIONS_TIMEOUT = 120
 
 
 async def run_migrations_background() -> None:
     """
-    Запуск миграций в фоновом потоке.
-    Не блокирует startup — приложение сразу отвечает на / и /health.
+    Запуск alembic upgrade head через asyncio.subprocess с таймаутом.
+    Полностью асинхронно, не блокирует event loop.
     """
     global _migrations_task
     logger.info("Starting database migrations in background...")
     try:
-        await asyncio.to_thread(_run_migrations_sync)
+        proc = await asyncio.create_subprocess_exec(
+            "alembic", "upgrade", "head",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=MIGRATIONS_TIMEOUT)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            raise TimeoutError(f"Migrations timeout ({MIGRATIONS_TIMEOUT}s)")
+        if proc.returncode != 0:
+            raise RuntimeError(stderr.decode() if stderr else f"Exit code {proc.returncode}")
         logger.info("Database migrations completed successfully")
     except Exception as e:
         logger.error("Database migrations failed: %s", e, exc_info=True)

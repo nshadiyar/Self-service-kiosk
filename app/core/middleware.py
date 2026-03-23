@@ -9,7 +9,7 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-UNWRAPPED_PATHS = {"/openapi.json", "/docs", "/redoc", "/health", "/"}
+UNWRAPPED_PATHS = {"/openapi.json", "/docs", "/redoc", "/health", "/health/db", "/"}
 
 
 def register_middleware(app: FastAPI):
