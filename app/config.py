@@ -1,3 +1,6 @@
+import os
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,9 +17,18 @@ class Settings(BaseSettings):
     # Debug (set True to show exception details in 500 responses)
     debug: bool = False
 
-    # Database
+    # Database - from DATABASE_URL or DATABASE_PRIVATE_URL (Railway); localhost default for local dev only
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/bromart_db"
     sqlalchemy_echo: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def env_database_url(cls, data: dict) -> dict:
+        """Prefer DATABASE_URL or DATABASE_PRIVATE_URL from env (Railway)."""
+        url = os.environ.get("DATABASE_URL") or os.environ.get("DATABASE_PRIVATE_URL")
+        if url:
+            data["database_url"] = url
+        return data
 
     @property
     def database_url_normalized(self) -> str:

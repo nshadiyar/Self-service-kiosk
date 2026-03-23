@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -27,8 +28,20 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Use sync URL for Alembic (postgresql, not asyncpg). Handles postgres:// (Railway) and postgresql://
-sync_url = settings.database_url_sync
+
+def _get_sync_url() -> str:
+    """Get sync PostgreSQL URL from env (Railway) or settings. Normalizes postgres:// -> postgresql://."""
+    url = os.environ.get("DATABASE_URL") or os.environ.get("DATABASE_PRIVATE_URL")
+    if not url:
+        url = settings.database_url
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[11:]
+    if "+asyncpg" in url:
+        url = url.replace("postgresql+asyncpg://", "postgresql://", 1)
+    return url
+
+
+sync_url = _get_sync_url()
 config.set_main_option("sqlalchemy.url", sync_url)
 
 target_metadata = Base.metadata
