@@ -8,6 +8,8 @@ engine = create_async_engine(
     echo=settings.sqlalchemy_echo,
     pool_pre_ping=True,
     pool_recycle=1800,
+    pool_timeout=10,
+    connect_args={"timeout": 5},
 )
 
 AsyncSessionLocal = async_sessionmaker(

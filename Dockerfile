@@ -14,7 +14,6 @@ COPY alembic.ini ./
 
 RUN chmod +x start.sh
 
+# Railway sets PORT dynamically; 8000 is fallback for local docker run
 EXPOSE 8000
-
-ENV PORT=8000
 CMD ["./start.sh"]

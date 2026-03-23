@@ -6,13 +6,13 @@ Application lifespan: async migrations, async scheduler, non-blocking startup.
 """
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 
-from app.config import settings
 from app.database import engine, AsyncSessionLocal
 from app.services.wallet_service import WalletService
 
@@ -87,7 +87,8 @@ async def lifespan(app: FastAPI):
     # 2. Миграции в фоне — приложение сразу готово к приёму запросов
     _migrations_task = asyncio.create_task(run_migrations_background())
 
-    logger.info("Application started successfully — listening on 0.0.0.0:%s", settings.port)
+    port = os.environ.get("PORT", "8000")
+    logger.info("Application started successfully — listening on 0.0.0.0:%s", port)
 
     yield
 
