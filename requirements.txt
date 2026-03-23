@@ -11,6 +11,3 @@ bcrypt>=4.0.0
 apscheduler>=3.10.0
 email-validator>=2.0.0
 python-dotenv>=1.0.0
-# Performance improvements
-uvloop>=0.17.0
-httptools>=0.6.0
