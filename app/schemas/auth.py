@@ -1,8 +1,10 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    """Login by email or IIN (12 digits)."""
+
+    login: str
     password: str
 
 

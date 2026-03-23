@@ -11,7 +11,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/login", response_model=Token)
 async def login(data: LoginRequest, db=Depends(get_db)):
     svc = AuthService(db)
-    access, refresh = await svc.login(data.email, data.password)
+    access, refresh = await svc.login(data.login, data.password)
     return Token(access_token=access, refresh_token=refresh)
 
 

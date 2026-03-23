@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Query
 
 from app.dependencies import get_db
@@ -10,7 +12,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 @router.get("", response_model=list[UserResponse])
 async def list_users(
-    facility_id: int | None = Query(None),
+    facility_id: UUID | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     db=Depends(get_db),
@@ -27,7 +29,7 @@ async def list_users(
 
 
 @router.get("/{user_id}", response_model=UserResponse)
-async def get_user(user_id: int, db=Depends(get_db), current_user=Depends(require_admin)):
+async def get_user(user_id: UUID, db=Depends(get_db), current_user=Depends(require_admin)):
     svc = UserService(db)
     user = await svc.get_by_id(user_id)
     if current_user.role.value == "PRISON_ADMIN" and current_user.facility_id != user.facility_id:
@@ -44,7 +46,7 @@ async def create_user(data: UserCreate, db=Depends(get_db), current_user=Depends
 
 
 @router.patch("/{user_id}", response_model=UserResponse)
-async def update_user(user_id: int, data: UserUpdate, db=Depends(get_db), current_user=Depends(require_admin)):
+async def update_user(user_id: UUID, data: UserUpdate, db=Depends(get_db), current_user=Depends(require_admin)):
     if current_user.role.value == "PRISON_ADMIN" and current_user.facility_id:
         from app.core.exceptions import AuthorizationError
         svc = UserService(db)

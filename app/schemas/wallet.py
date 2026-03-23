@@ -1,11 +1,13 @@
 from datetime import datetime
 from decimal import Decimal
-from pydantic import BaseModel
+from uuid import UUID
+
+from pydantic import BaseModel, field_serializer
 
 
 class WalletResponse(BaseModel):
-    id: int
-    user_id: int
+    id: UUID
+    user_id: UUID
     balance: Decimal
     monthly_spent: Decimal
     monthly_limit: Decimal | None
@@ -13,7 +15,11 @@ class WalletResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
+    @field_serializer("balance", "monthly_spent", "monthly_limit")
+    def serialize_decimal(self, v: Decimal | None) -> float | None:
+        return float(v) if v is not None else None
+
 
 class TopUpRequest(BaseModel):
-    user_id: int
+    user_id: UUID
     amount: Decimal

@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Query
 
 from app.dependencies import get_db
@@ -30,7 +32,7 @@ async def list_orders(
 
 @router.get("/{order_id}", response_model=OrderResponse)
 async def get_order(
-    order_id: int,
+    order_id: UUID,
     db=Depends(get_db),
     current_user=Depends(get_current_user_dep),
 ):
@@ -58,7 +60,7 @@ async def create_order(
 
 @router.post("/{order_id}/approve", response_model=OrderResponse)
 async def approve_order(
-    order_id: int,
+    order_id: UUID,
     db=Depends(get_db),
     current_user=Depends(require_admin),
 ):
@@ -73,7 +75,7 @@ async def approve_order(
 
 @router.post("/{order_id}/reject", response_model=OrderResponse)
 async def reject_order(
-    order_id: int,
+    order_id: UUID,
     data: RejectOrderRequest,
     db=Depends(get_db),
     current_user=Depends(require_admin),

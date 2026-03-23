@@ -1,9 +1,13 @@
+import json
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-import json
+from fastapi.responses import JSONResponse, Response
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def register_middleware(app: FastAPI):
@@ -38,13 +42,23 @@ async def response_wrapper_middleware(request: Request, call_next):
             if not isinstance(data, dict) or "success" not in data:
                 wrapped_data = {"success": True, "data": data, "message": "Success"}
                 body = json.dumps(wrapped_data).encode()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Response wrap failed for %s: %s", request.url.path, e)
         headers = {
             k: v for k, v in response.headers.items() if k.lower() != "content-length"
         }
+        try:
+            content = json.loads(body.decode()) if body else None
+        except Exception as e:
+            logger.error("Response JSON parse failed for %s: %s", request.url.path, e)
+            return Response(
+                content=body,
+                status_code=response.status_code,
+                headers=dict(response.headers),
+                media_type="application/json",
+            )
         return JSONResponse(
-            content=json.loads(body.decode()) if body else None,
+            content=content,
             status_code=response.status_code,
             headers=headers,
         )

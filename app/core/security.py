@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from typing import Annotated, Any
+from uuid import UUID
 
 import bcrypt
 from fastapi import Depends, Request
@@ -23,7 +24,7 @@ def get_password_hash(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
-def create_access_token(subject: str | int, expires_delta: timedelta | None = None) -> str:
+def create_access_token(subject: str | int | UUID, expires_delta: timedelta | None = None) -> str:
     to_encode: dict[str, Any] = {"sub": str(subject)}
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=settings.access_token_expire_minutes))
     to_encode["exp"] = expire
@@ -31,7 +32,7 @@ def create_access_token(subject: str | int, expires_delta: timedelta | None = No
     return jwt.encode(to_encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
-def create_refresh_token(subject: str | int) -> str:
+def create_refresh_token(subject: str | int | UUID) -> str:
     to_encode = {"sub": str(subject), "type": "refresh"}
     expire = datetime.utcnow() + timedelta(days=settings.refresh_token_expire_days)
     to_encode["exp"] = expire
@@ -60,8 +61,12 @@ async def get_current_user_dep(
     user_id = payload.get("sub")
     if not user_id:
         raise AuthenticationError("Invalid token")
+    try:
+        user_uuid = UUID(user_id)
+    except (ValueError, TypeError):
+        raise AuthenticationError("Invalid token")
     result = await db.execute(
-        select(User).where(User.id == int(user_id)).where(User.is_active == True)
+        select(User).where(User.id == user_uuid).where(User.is_active == True)
     )
     user = result.scalar_one_or_none()
     if not user:

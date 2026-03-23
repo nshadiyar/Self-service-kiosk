@@ -1,12 +1,14 @@
 from datetime import datetime
 from decimal import Decimal
-from pydantic import BaseModel
+from uuid import UUID
+
+from pydantic import BaseModel, field_serializer
 
 from app.core.enums import OrderStatus
 
 
 class OrderItemCreate(BaseModel):
-    product_id: int
+    product_id: UUID
     quantity: int
 
 
@@ -19,19 +21,23 @@ class OrderCreate(BaseModel):
 
 
 class OrderItemResponse(BaseModel):
-    id: int
-    product_id: int
+    id: UUID
+    product_id: UUID
     quantity: int
     unit_price: Decimal
     subtotal: Decimal
 
     model_config = {"from_attributes": True}
 
+    @field_serializer("unit_price", "subtotal")
+    def serialize_decimal(self, v: Decimal) -> float:
+        return float(v)
+
 
 class OrderResponse(BaseModel):
-    id: int
-    user_id: int
-    facility_id: int
+    id: UUID
+    user_id: UUID
+    facility_id: UUID
     status: OrderStatus
     total_amount: Decimal
     rejection_reason: str | None
@@ -39,3 +45,7 @@ class OrderResponse(BaseModel):
     items: list[OrderItemResponse] = []
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("total_amount")
+    def serialize_decimal(self, v: Decimal) -> float:
+        return float(v)

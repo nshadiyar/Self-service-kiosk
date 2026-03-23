@@ -1,4 +1,6 @@
 from datetime import datetime
+from uuid import UUID
+
 from pydantic import BaseModel
 
 from app.core.enums import SecurityRegime
@@ -24,7 +26,7 @@ class FacilityUpdate(BaseModel):
 
 
 class FacilityResponse(BaseModel):
-    id: int
+    id: UUID
     name: str
     code: str
     address: str | None

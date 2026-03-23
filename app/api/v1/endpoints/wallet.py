@@ -4,7 +4,7 @@ from app.dependencies import get_db
 from app.services.user_service import UserService
 from app.schemas.wallet import WalletResponse, TopUpRequest
 from app.services.wallet_service import WalletService
-from app.core.security import get_current_user_dep, require_inmate, require_admin
+from app.core.security import require_inmate, require_admin
 
 router = APIRouter(prefix="/wallet", tags=["wallet"])
 
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/wallet", tags=["wallet"])
 @router.get("", response_model=WalletResponse)
 async def get_wallet(
     db=Depends(get_db),
-    current_user=Depends(get_current_user_dep),
+    current_user=Depends(require_inmate),
 ):
     svc = WalletService(db)
     wallet = await svc.get_by_user_id(current_user.id)

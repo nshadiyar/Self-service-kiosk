@@ -1,4 +1,5 @@
 from decimal import Decimal
+from uuid import UUID
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,14 +14,22 @@ class WalletService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_by_user_id(self, user_id: int) -> Wallet:
+    async def get_by_user_id(self, user_id: UUID) -> Wallet:
         result = await self.db.execute(select(Wallet).where(Wallet.user_id == user_id))
         w = result.scalar_one_or_none()
         if not w:
             raise NotFoundError("Wallet not found")
         return w
 
-    async def top_up(self, user_id: int, amount: Decimal) -> Wallet:
+    async def create_for_user(self, user_id: UUID) -> Wallet:
+        """Create an empty wallet for a new user."""
+        wallet = Wallet(user_id=user_id)
+        self.db.add(wallet)
+        await self.db.flush()
+        await self.db.refresh(wallet)
+        return wallet
+
+    async def top_up(self, user_id: UUID, amount: Decimal) -> Wallet:
         wallet = await self.get_by_user_id(user_id)
         wallet.balance = (wallet.balance or Decimal(0)) + amount
         tx = WalletTransaction(

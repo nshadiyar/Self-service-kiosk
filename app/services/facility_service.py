@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,7 +12,7 @@ class FacilityService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_by_id(self, facility_id: int) -> Facility:
+    async def get_by_id(self, facility_id: UUID) -> Facility:
         result = await self.db.execute(select(Facility).where(Facility.id == facility_id))
         f = result.scalar_one_or_none()
         if not f:
@@ -38,7 +40,7 @@ class FacilityService:
         await self.db.refresh(facility)
         return facility
 
-    async def update(self, facility_id: int, data: FacilityUpdate) -> Facility:
+    async def update(self, facility_id: UUID, data: FacilityUpdate) -> Facility:
         facility = await self.get_by_id(facility_id)
         if data.name is not None:
             facility.name = data.name

@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,12 +12,12 @@ class CatalogService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def list_categories(self, facility_id: int | None = None) -> list[Category]:
+    async def list_categories(self, facility_id: UUID | None = None) -> list[Category]:
         q = select(Category).where(Category.is_active == True).order_by(Category.sort_order)
         result = await self.db.execute(q)
         return list(result.scalars().all())
 
-    async def get_category(self, category_id: int) -> Category:
+    async def get_category(self, category_id: UUID) -> Category:
         result = await self.db.execute(select(Category).where(Category.id == category_id))
         c = result.scalar_one_or_none()
         if not c:
@@ -24,8 +26,8 @@ class CatalogService:
 
     async def list_products(
         self,
-        category_id: int | None = None,
-        facility_id: int | None = None,
+        category_id: UUID | None = None,
+        facility_id: UUID | None = None,
         skip: int = 0,
         limit: int = 50,
     ) -> list[Product]:
@@ -38,7 +40,7 @@ class CatalogService:
         result = await self.db.execute(q)
         return list(result.scalars().all())
 
-    async def get_product(self, product_id: int) -> Product:
+    async def get_product(self, product_id: UUID) -> Product:
         result = await self.db.execute(select(Product).where(Product.id == product_id))
         p = result.scalar_one_or_none()
         if not p:

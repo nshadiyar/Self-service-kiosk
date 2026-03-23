@@ -1,7 +1,9 @@
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
 import logging
 
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
+
+from app.config import settings
 from app.core.exceptions import BromartException
 
 logger = logging.getLogger(__name__)
@@ -28,8 +30,9 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 
 async def general_exception_handler(request: Request, exc: Exception):
-    logger.error(f"Unexpected error: {str(exc)}", exc_info=True)
+    logger.error("Unexpected error: %s", exc, exc_info=True)
+    message = str(exc) if settings.debug else "Internal server error"
     return JSONResponse(
         status_code=500,
-        content={"success": False, "data": None, "message": "Internal server error"},
+        content={"success": False, "data": None, "message": message},
     )

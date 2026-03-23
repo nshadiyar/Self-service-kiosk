@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Query
 
 from app.dependencies import get_db
@@ -20,7 +22,7 @@ async def list_categories(
 
 @router.get("/categories/{category_id}", response_model=CategoryResponse)
 async def get_category(
-    category_id: int,
+    category_id: UUID,
     db=Depends(get_db),
     current_user=Depends(get_current_user_dep),
 ):
@@ -31,7 +33,7 @@ async def get_category(
 
 @router.get("/products", response_model=list[ProductResponse])
 async def list_products(
-    category_id: int | None = Query(None),
+    category_id: UUID | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     db=Depends(get_db),
@@ -45,7 +47,7 @@ async def list_products(
 
 @router.get("/products/{product_id}", response_model=ProductResponse)
 async def get_product(
-    product_id: int,
+    product_id: UUID,
     db=Depends(get_db),
     current_user=Depends(get_current_user_dep),
 ):

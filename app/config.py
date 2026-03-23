@@ -8,8 +8,15 @@ class Settings(BaseSettings):
     app_name: str = "Bromart Kiosk API"
     app_version: str = "1.0.0"
 
+    # Logging
+    log_level: str = "INFO"
+
+    # Debug (set True to show exception details in 500 responses)
+    debug: bool = False
+
     # Database
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/bromart_db"
+    sqlalchemy_echo: bool = False
 
     # JWT
     jwt_secret_key: str = "your-secret-key-change-in-production"

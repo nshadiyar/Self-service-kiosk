@@ -9,10 +9,12 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 
+from app.config import settings
 from app.database import engine, AsyncSessionLocal
 from app.services.wallet_service import WalletService
 
-logging.basicConfig(level=logging.INFO)
+_log_level = getattr(logging, settings.log_level.upper(), logging.INFO)
+logging.basicConfig(level=_log_level, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 

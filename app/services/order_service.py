@@ -1,4 +1,5 @@
 from decimal import Decimal
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,7 +19,7 @@ class OrderService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_by_id(self, order_id: int) -> Order:
+    async def get_by_id(self, order_id: UUID) -> Order:
         result = await self.db.execute(
             select(Order).where(Order.id == order_id).options(selectinload(Order.items))
         )
@@ -29,13 +30,13 @@ class OrderService:
 
     async def list_orders(
         self,
-        user_id: int | None = None,
-        facility_id: int | None = None,
+        user_id: UUID | None = None,
+        facility_id: UUID | None = None,
         status: OrderStatus | None = None,
         skip: int = 0,
         limit: int = 20,
     ):
-        q = select(Order)
+        q = select(Order).options(selectinload(Order.items))
         if user_id is not None:
             q = q.where(Order.user_id == user_id)
         if facility_id is not None:
@@ -84,18 +85,18 @@ class OrderService:
         wallet.monthly_spent = (wallet.monthly_spent or 0) + total
         await self.db.flush()
         await self.db.refresh(order)
-        return order
+        return await self.get_by_id(order.id)
 
-    async def approve(self, order_id: int) -> Order:
+    async def approve(self, order_id: UUID) -> Order:
         order = await self.get_by_id(order_id)
         if order.status != OrderStatus.PENDING:
             raise ValidationError("Order cannot be approved")
         order.status = OrderStatus.APPROVED
         await self.db.flush()
         await self.db.refresh(order)
-        return order
+        return await self.get_by_id(order_id)
 
-    async def reject(self, order_id: int, reason: str) -> Order:
+    async def reject(self, order_id: UUID, reason: str) -> Order:
         order = await self.get_by_id(order_id)
         if order.status != OrderStatus.PENDING:
             raise ValidationError("Order cannot be rejected")
@@ -108,4 +109,4 @@ class OrderService:
             wallet.monthly_spent = (wallet.monthly_spent or 0) - order.total_amount
         await self.db.flush()
         await self.db.refresh(order)
-        return order
+        return await self.get_by_id(order_id)

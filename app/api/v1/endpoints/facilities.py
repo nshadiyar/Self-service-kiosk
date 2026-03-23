@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Query
 
 from app.dependencies import get_db
@@ -21,7 +23,7 @@ async def list_facilities(
 
 
 @router.get("/{facility_id}", response_model=FacilityResponse)
-async def get_facility(facility_id: int, db=Depends(get_db), current_user=Depends(require_admin)):
+async def get_facility(facility_id: UUID, db=Depends(get_db), current_user=Depends(require_admin)):
     svc = FacilityService(db)
     facility = await svc.get_by_id(facility_id)
     return FacilityResponse.model_validate(facility)
@@ -36,7 +38,7 @@ async def create_facility(data: FacilityCreate, db=Depends(get_db), current_user
 
 @router.patch("/{facility_id}", response_model=FacilityResponse)
 async def update_facility(
-    facility_id: int, data: FacilityUpdate, db=Depends(get_db), current_user=Depends(require_super_admin)
+    facility_id: UUID, data: FacilityUpdate, db=Depends(get_db), current_user=Depends(require_super_admin)
 ):
     svc = FacilityService(db)
     facility = await svc.update(facility_id, data)
