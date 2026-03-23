@@ -27,8 +27,8 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Use sync URL for Alembic (postgresql instead of postgresql+asyncpg)
-sync_url = settings.database_url.replace("postgresql+asyncpg://", "postgresql://")
+# Use sync URL for Alembic (postgresql, not asyncpg). Handles postgres:// (Railway) and postgresql://
+sync_url = settings.database_url_sync
 config.set_main_option("sqlalchemy.url", sync_url)
 
 target_metadata = Base.metadata
@@ -48,8 +48,10 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
+    configuration = config.get_section(config.config_ini_section, {})
+    configuration["sqlalchemy.url"] = sync_url
     connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        configuration,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )

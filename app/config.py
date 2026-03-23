@@ -18,6 +18,30 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/bromart_db"
     sqlalchemy_echo: bool = False
 
+    @property
+    def database_url_normalized(self) -> str:
+        """Normalize postgres:// to postgresql:// for SQLAlchemy (Railway uses postgres://)."""
+        url = self.database_url
+        if url.startswith("postgres://"):
+            url = "postgresql://" + url[11:]
+        return url
+
+    @property
+    def database_url_async(self) -> str:
+        """URL for async SQLAlchemy (postgresql+asyncpg)."""
+        url = self.database_url_normalized
+        if url.startswith("postgresql://") and "+asyncpg" not in url:
+            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return url
+
+    @property
+    def database_url_sync(self) -> str:
+        """URL for sync SQLAlchemy (Alembic, psycopg2)."""
+        url = self.database_url_normalized
+        if "+asyncpg" in url:
+            url = url.replace("postgresql+asyncpg://", "postgresql://", 1)
+        return url
+
     # JWT
     jwt_secret_key: str = "your-secret-key-change-in-production"
     jwt_algorithm: str = "HS256"
