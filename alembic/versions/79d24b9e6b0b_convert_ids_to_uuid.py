@@ -33,7 +33,12 @@ def upgrade() -> None:
     op.execute("DROP TYPE IF EXISTS orderstatus CASCADE")
     op.execute("DROP TYPE IF EXISTS userrole CASCADE")
 
-    # Recreate tables with UUID (sa.Enum will create enum types)
+    # Create ENUM types BEFORE any table that uses them (PostgreSQL requirement)
+    op.execute("CREATE TYPE userrole AS ENUM ('SUPER_ADMIN', 'PRISON_ADMIN', 'INMATE')")
+    op.execute("CREATE TYPE orderstatus AS ENUM ('PENDING', 'APPROVED', 'REJECTED', 'FULFILLED', 'CANCELLED')")
+    op.execute("CREATE TYPE transactiontype AS ENUM ('TOP_UP', 'ORDER_PAYMENT', 'REFUND', 'MONTHLY_RESET')")
+
+    # Recreate tables with UUID (sa.Enum will use existing types)
     op.create_table(
         "facilities",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),

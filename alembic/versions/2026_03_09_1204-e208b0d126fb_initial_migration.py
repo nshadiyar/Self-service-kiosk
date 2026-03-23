@@ -17,6 +17,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Create ENUM types BEFORE any table that uses them (PostgreSQL requirement)
+    op.execute("CREATE TYPE userrole AS ENUM ('SUPER_ADMIN', 'PRISON_ADMIN', 'INMATE')")
+    op.execute("CREATE TYPE orderstatus AS ENUM ('PENDING', 'APPROVED', 'REJECTED', 'FULFILLED', 'CANCELLED')")
+    op.execute("CREATE TYPE transactiontype AS ENUM ('TOP_UP', 'ORDER_PAYMENT', 'REFUND', 'MONTHLY_RESET')")
+
     op.create_table(
         "facilities",
         sa.Column("id", sa.Integer(), nullable=False),
