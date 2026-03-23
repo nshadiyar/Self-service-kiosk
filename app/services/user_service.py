@@ -1,5 +1,4 @@
 from uuid import UUID
-from typing import Dict, Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,7 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.enums import UserRole
 from app.core.security import get_password_hash
 from app.core.exceptions import NotFoundError, ConflictError
-from app.core.db_utils import AsyncDatabaseUtils
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate
 from app.services.wallet_service import WalletService
@@ -95,43 +93,3 @@ class UserService:
         await self.db.flush()
         await self.db.refresh(user)
         return user
-
-    async def get_user_statistics(self) -> Dict[str, Any]:
-        """Получить статистику пользователей через прямые SQL запросы"""
-        # Пример использования AsyncDatabaseUtils для сложных аналитических запросов
-        
-        # Статистика по ролям
-        role_stats_query = """
-            SELECT 
-                role,
-                COUNT(*) as total,
-                COUNT(CASE WHEN is_active THEN 1 END) as active,
-                COUNT(CASE WHEN created_at > NOW() - INTERVAL '30 days' THEN 1 END) as recent
-            FROM users 
-            GROUP BY role
-            ORDER BY role
-        """
-        
-        role_stats = await AsyncDatabaseUtils.execute_query(role_stats_query)
-        
-        # Статистика по учреждениям
-        facility_stats_query = """
-            SELECT 
-                f.name as facility_name,
-                f.code as facility_code,
-                COUNT(u.id) as user_count,
-                COUNT(CASE WHEN u.is_active THEN 1 END) as active_users
-            FROM facilities f
-            LEFT JOIN users u ON f.id = u.facility_id
-            GROUP BY f.id, f.name, f.code
-            ORDER BY user_count DESC
-        """
-        
-        facility_stats = await AsyncDatabaseUtils.execute_query(facility_stats_query)
-        
-        return {
-            "by_role": role_stats,
-            "by_facility": facility_stats,
-            "total_users": sum(row["total"] for row in role_stats),
-            "total_active": sum(row["active"] for row in role_stats)
-        }

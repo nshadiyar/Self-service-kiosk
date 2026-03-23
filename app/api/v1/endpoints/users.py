@@ -1,5 +1,4 @@
 from uuid import UUID
-from typing import Dict, Any
 
 from fastapi import APIRouter, Depends, Query
 
@@ -57,18 +56,3 @@ async def update_user(user_id: UUID, data: UserUpdate, db=Depends(get_db), curre
     svc = UserService(db)
     user = await svc.update(user_id, data)
     return UserResponse.model_validate(user)
-
-
-@router.get("/statistics", response_model=Dict[str, Any])
-async def get_user_statistics(
-    db=Depends(get_db),
-    current_user=Depends(require_super_admin)
-):
-    """Получить статистику пользователей (только для SUPER_ADMIN)"""
-    svc = UserService(db)
-    stats = await svc.get_user_statistics()
-    return {
-        "success": True,
-        "data": stats,
-        "message": "User statistics retrieved successfully"
-    }

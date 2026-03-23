@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from sqlalchemy import text
 
 from app.config import settings
 from app.core.logging_config import setup_logging
@@ -6,8 +7,8 @@ from app.core.lifespan import lifespan
 from app.core.middleware import register_middleware
 from app.core.exception_handlers import register_exception_handlers
 from app.api.v1.router import router as api_v1_router
+from app.database import AsyncSessionLocal
 
-# Setup logging before creating the app
 setup_logging()
 
 app = FastAPI(
@@ -24,7 +25,23 @@ app.include_router(api_v1_router)
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "version": settings.app_version}
+    """Health check with database connectivity test."""
+    db_ok = False
+    try:
+        async with AsyncSessionLocal() as db:
+            await db.execute(text("SELECT 1"))
+        db_ok = True
+    except Exception:
+        pass
+
+    from app.core.lifespan import scheduler
+
+    return {
+        "status": "healthy" if db_ok else "degraded",
+        "version": settings.app_version,
+        "database": "connected" if db_ok else "unavailable",
+        "scheduler": "running" if scheduler and scheduler.running else "stopped",
+    }
 
 
 @app.get("/")
