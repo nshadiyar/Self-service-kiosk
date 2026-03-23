@@ -45,8 +45,8 @@ async def health_check():
 @app.get("/ready")
 async def ready():
     """
-    Readiness check для Railway/K8s: проверка БД через AsyncSessionLocal (SELECT 1),
-    таймаут 3 секунды. 200 — готов к приёму трафика, 503 — БД недоступна.
+    Readiness probe: проверка БД через AsyncSessionLocal (SELECT 1), таймаут 3 сек.
+    status: ok — БД доступна, status: degraded — БД недоступна.
     """
     from app.database import AsyncSessionLocal
 
@@ -54,11 +54,11 @@ async def ready():
         async with AsyncSessionLocal() as db:
             await asyncio.wait_for(db.execute(text("SELECT 1")), timeout=3)
         return JSONResponse(
-            {"status": "ready", "database": "ok"},
+            {"status": "ok", "database": "ok"},
             status_code=200,
         )
     except Exception as e:
         return JSONResponse(
-            {"status": "not_ready", "database": str(e)},
+            {"status": "degraded", "database": str(e)},
             status_code=503,
         )
