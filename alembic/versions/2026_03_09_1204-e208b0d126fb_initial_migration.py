@@ -17,10 +17,35 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Create ENUM types BEFORE any table that uses them (PostgreSQL requirement)
-    op.execute("CREATE TYPE userrole AS ENUM ('SUPER_ADMIN', 'PRISON_ADMIN', 'INMATE')")
-    op.execute("CREATE TYPE orderstatus AS ENUM ('PENDING', 'APPROVED', 'REJECTED', 'FULFILLED', 'CANCELLED')")
-    op.execute("CREATE TYPE transactiontype AS ENUM ('TOP_UP', 'ORDER_PAYMENT', 'REFUND', 'MONTHLY_RESET')")
+    # Create ENUM types BEFORE any table that uses them (PostgreSQL requirement).
+    # Use DO blocks to avoid DuplicateObject if type already exists (e.g. from partial run).
+    op.execute("""
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'userrole') THEN
+                CREATE TYPE userrole AS ENUM ('SUPER_ADMIN', 'PRISON_ADMIN', 'INMATE');
+            END IF;
+        END
+        $$;
+    """)
+    op.execute("""
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'orderstatus') THEN
+                CREATE TYPE orderstatus AS ENUM ('PENDING', 'APPROVED', 'REJECTED', 'FULFILLED', 'CANCELLED');
+            END IF;
+        END
+        $$;
+    """)
+    op.execute("""
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'transactiontype') THEN
+                CREATE TYPE transactiontype AS ENUM ('TOP_UP', 'ORDER_PAYMENT', 'REFUND', 'MONTHLY_RESET');
+            END IF;
+        END
+        $$;
+    """)
 
     op.create_table(
         "facilities",
@@ -164,6 +189,7 @@ def downgrade() -> None:
     op.drop_table("categories")
     op.drop_table("users")
     op.drop_table("facilities")
-    op.execute("DROP TYPE IF EXISTS userrole")
-    op.execute("DROP TYPE IF EXISTS orderstatus")
-    op.execute("DROP TYPE IF EXISTS transactiontype")
+    # Drop types only after all tables are dropped (tables reference them)
+    op.execute("DROP TYPE IF EXISTS userrole CASCADE")
+    op.execute("DROP TYPE IF EXISTS orderstatus CASCADE")
+    op.execute("DROP TYPE IF EXISTS transactiontype CASCADE")
