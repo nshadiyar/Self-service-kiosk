@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.config import settings
@@ -7,7 +8,6 @@ from app.core.lifespan import lifespan
 from app.core.middleware import register_middleware
 from app.core.exception_handlers import register_exception_handlers
 from app.api.v1.router import router as api_v1_router
-from app.database import AsyncSessionLocal
 
 setup_logging()
 
@@ -23,27 +23,35 @@ register_exception_handlers(app)
 app.include_router(api_v1_router)
 
 
+@app.get("/")
+async def root():
+    """Root — instant response, no DB."""
+    return JSONResponse({"status": "ok", "version": settings.app_version})
+
+
 @app.get("/health")
 async def health_check():
-    """Health check with database connectivity test."""
-    db_ok = False
+    """Health check — instant response, no DB."""
+    return JSONResponse({"status": "ok", "version": settings.app_version})
+
+
+@app.get("/health/db")
+async def health_db():
+    """Deep health check — tests database connectivity."""
+    from app.database import AsyncSessionLocal
+
     try:
         async with AsyncSessionLocal() as db:
             await db.execute(text("SELECT 1"))
-        db_ok = True
-    except Exception:
-        pass
+        db_status = "connected"
+    except Exception as exc:
+        db_status = f"error: {exc}"
 
     from app.core.lifespan import scheduler
 
-    return {
-        "status": "healthy" if db_ok else "degraded",
+    return JSONResponse({
+        "status": "ok" if "connected" in db_status else "degraded",
         "version": settings.app_version,
-        "database": "connected" if db_ok else "unavailable",
+        "database": db_status,
         "scheduler": "running" if scheduler and scheduler.running else "stopped",
-    }
-
-
-@app.get("/")
-async def root():
-    return {"message": f"Welcome to {settings.app_name}", "docs": "/docs"}
+    })

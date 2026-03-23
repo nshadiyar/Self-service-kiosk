@@ -9,6 +9,8 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+UNWRAPPED_PATHS = {"/openapi.json", "/docs", "/redoc", "/health", "/"}
+
 
 def register_middleware(app: FastAPI):
     app.add_middleware(
@@ -21,45 +23,49 @@ def register_middleware(app: FastAPI):
     app.middleware("http")(response_wrapper_middleware)
 
 
-# Paths that must not be wrapped (OpenAPI/Swagger need raw JSON)
-UNWRAPPED_PATHS = {"/openapi.json", "/docs", "/redoc"}
-
-
 async def response_wrapper_middleware(request: Request, call_next):
     if request.url.path in UNWRAPPED_PATHS:
         return await call_next(request)
 
-    response = await call_next(request)
-    if (
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception("Unhandled error in middleware for %s", request.url.path)
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "data": None, "message": "Internal server error"},
+        )
+
+    if not (
         response.status_code < 400
         and response.headers.get("content-type", "").startswith("application/json")
     ):
-        body = b""
-        async for chunk in response.body_iterator:
-            body += chunk
-        try:
-            data = json.loads(body.decode())
-            if not isinstance(data, dict) or "success" not in data:
-                wrapped_data = {"success": True, "data": data, "message": "Success"}
-                body = json.dumps(wrapped_data).encode()
-        except Exception as e:
-            logger.warning("Response wrap failed for %s: %s", request.url.path, e)
-        headers = {
-            k: v for k, v in response.headers.items() if k.lower() != "content-length"
-        }
-        try:
-            content = json.loads(body.decode()) if body else None
-        except Exception as e:
-            logger.error("Response JSON parse failed for %s: %s", request.url.path, e)
-            return Response(
-                content=body,
-                status_code=response.status_code,
-                headers=dict(response.headers),
-                media_type="application/json",
-            )
-        return JSONResponse(
-            content=content,
+        return response
+
+    # Read the streaming body into bytes
+    chunks: list[bytes] = []
+    async for chunk in response.body_iterator:
+        if isinstance(chunk, str):
+            chunks.append(chunk.encode())
+        else:
+            chunks.append(chunk)
+    body = b"".join(chunks)
+
+    if not body:
+        return Response(status_code=response.status_code, media_type="application/json")
+
+    try:
+        data = json.loads(body)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return Response(
+            content=body,
             status_code=response.status_code,
-            headers=headers,
+            headers=dict(response.headers),
+            media_type="application/json",
         )
-    return response
+
+    # Wrap only if not already wrapped
+    if not isinstance(data, dict) or "success" not in data:
+        data = {"success": True, "data": data, "message": "Success"}
+
+    return JSONResponse(content=data, status_code=response.status_code)
