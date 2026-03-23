@@ -1,3 +1,11 @@
+"""
+FastAPI application — быстрый startup для Railway.
+
+- / и /health отвечают мгновенно, без обращения к БД (устраняет 502)
+- /health/db — проверка БД с таймаутом 3 сек
+- DATABASE_URL читается из окружения (Railway), нормализуется для asyncpg в app.config
+"""
+import asyncio
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -22,36 +30,55 @@ register_middleware(app)
 register_exception_handlers(app)
 app.include_router(api_v1_router)
 
+HEALTH_DB_TIMEOUT = 3.0
+
 
 @app.get("/")
 async def root():
-    """Root — instant response, no DB."""
+    """
+    Корневой endpoint — мгновенный ответ без обращения к БД.
+    Railway health probe использует этот или /health для проверки доступности.
+    """
     return JSONResponse({"status": "ok", "version": settings.app_version})
 
 
 @app.get("/health")
 async def health_check():
-    """Health check — instant response, no DB."""
+    """
+    Health check — мгновенный ответ без обращения к БД.
+    Используется Railway и load balancer для проверки живости приложения.
+    """
     return JSONResponse({"status": "ok", "version": settings.app_version})
 
 
 @app.get("/health/db")
 async def health_db():
-    """Deep health check — tests database connectivity."""
+    """
+    Deep health check — проверка подключения к PostgreSQL с таймаутом 3 сек.
+    Быстро возвращает статус, не блокирует надолго при проблемах с БД.
+    """
     from app.database import AsyncSessionLocal
 
-    try:
+    async def _check_db():
         async with AsyncSessionLocal() as db:
             await db.execute(text("SELECT 1"))
+
+    db_status: str
+    try:
+        await asyncio.wait_for(_check_db(), timeout=HEALTH_DB_TIMEOUT)
         db_status = "connected"
+    except asyncio.TimeoutError:
+        db_status = f"error: connection timeout ({HEALTH_DB_TIMEOUT}s)"
     except Exception as exc:
         db_status = f"error: {exc}"
 
     from app.core.lifespan import scheduler
 
-    return JSONResponse({
-        "status": "ok" if "connected" in db_status else "degraded",
-        "version": settings.app_version,
-        "database": db_status,
-        "scheduler": "running" if scheduler and scheduler.running else "stopped",
-    })
+    return JSONResponse(
+        {
+            "status": "ok" if db_status == "connected" else "degraded",
+            "version": settings.app_version,
+            "database": db_status,
+            "scheduler": "running" if scheduler and scheduler.running else "stopped",
+        }
+    )
