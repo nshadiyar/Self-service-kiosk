@@ -2,8 +2,7 @@
 FastAPI application — быстрый startup для Railway (устраняет 502).
 
 - / и /health — мгновенный ответ, без БД
-- /health/db — проверка БД через AsyncSessionLocal с таймаутом 3 сек
-- DATABASE_URL: postgres:// → postgresql://, +asyncpg для asyncpg (app.config)
+- /ready — readiness check: проверка БД через AsyncSessionLocal (SELECT 1, таймаут 3 сек)
 """
 import asyncio
 from fastapi import FastAPI
@@ -43,26 +42,23 @@ async def health_check():
     return JSONResponse({"status": "ok", "version": settings.app_version})
 
 
-@app.get("/health/db")
-async def health_db():
+@app.get("/ready")
+async def ready():
     """
-    Проверка БД через AsyncSessionLocal с таймаутом 3 сек.
+    Readiness check для Railway/K8s: проверка БД через AsyncSessionLocal (SELECT 1),
+    таймаут 3 секунды. 200 — готов к приёму трафика, 503 — БД недоступна.
     """
     from app.database import AsyncSessionLocal
-    from app.core.lifespan import scheduler
 
-    status = "ok"
     try:
         async with AsyncSessionLocal() as db:
             await asyncio.wait_for(db.execute(text("SELECT 1")), timeout=3)
+        return JSONResponse(
+            {"status": "ready", "database": "ok"},
+            status_code=200,
+        )
     except Exception as e:
-        status = f"error: {e}"
-
-    return JSONResponse(
-        {
-            "status": "ok" if status == "ok" else "degraded",
-            "version": settings.app_version,
-            "database": status,
-            "scheduler": "running" if scheduler and scheduler.running else "stopped",
-        }
-    )
+        return JSONResponse(
+            {"status": "not_ready", "database": str(e)},
+            status_code=503,
+        )
