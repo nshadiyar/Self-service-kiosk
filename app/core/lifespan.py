@@ -69,7 +69,8 @@ async def lifespan(app: FastAPI):
     """
     global scheduler, _migrations_task
 
-    logger.info("Starting application")
+    port = os.environ.get("PORT", "8000")
+    logger.info("Starting application — PORT=%s (from env)", port)
 
     # 1. Scheduler — AsyncIOScheduler использует текущий event loop, не блокирует
     scheduler = AsyncIOScheduler(
@@ -87,7 +88,6 @@ async def lifespan(app: FastAPI):
     # 2. Миграции в фоне — приложение сразу готово к приёму запросов
     _migrations_task = asyncio.create_task(run_migrations_background())
 
-    port = os.environ.get("PORT", "8000")
     logger.info("Application started successfully — listening on 0.0.0.0:%s", port)
 
     yield
