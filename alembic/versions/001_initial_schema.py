@@ -6,6 +6,13 @@ Create Date: 2026-03-23
 
 Single migration that creates the full database schema from SQLAlchemy models.
 ENUM types are created safely using DO blocks (IF NOT EXISTS pattern).
+
+For EMPTY database: run `alembic upgrade head`.
+
+For EXISTING database (e.g. after replacing old migrations):
+  1. Drop all tables and alembic_version: DROP SCHEMA public CASCADE; CREATE SCHEMA public;
+  2. Or manually drop tables in reverse FK order, then: DELETE FROM alembic_version;
+  3. Run: alembic upgrade head
 """
 from typing import Sequence, Union
 
@@ -79,7 +86,11 @@ def upgrade() -> None:
         sa.Column("email", sa.String(255), nullable=False),
         sa.Column("hashed_password", sa.String(255), nullable=False),
         sa.Column("full_name", sa.String(255), nullable=False),
-        sa.Column("role", sa.Enum("SUPER_ADMIN", "PRISON_ADMIN", "INMATE", name="userrole"), nullable=False),
+        sa.Column(
+            "role",
+            postgresql.ENUM("SUPER_ADMIN", "PRISON_ADMIN", "INMATE", name="userrole", create_type=False),
+            nullable=False,
+        ),
         sa.Column("facility_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("iin", sa.String(12), nullable=True),
         sa.Column("photo_url", sa.String(500), nullable=True),
@@ -133,7 +144,11 @@ def upgrade() -> None:
         sa.Column("facility_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column(
             "status",
-            sa.Enum("PENDING", "APPROVED", "REJECTED", "FULFILLED", "CANCELLED", name="orderstatus"),
+            postgresql.ENUM(
+                "PENDING", "APPROVED", "REJECTED", "FULFILLED", "CANCELLED",
+                name="orderstatus",
+                create_type=False,
+            ),
             server_default=sa.text("'PENDING'::orderstatus"),
             nullable=True,
         ),
@@ -165,7 +180,11 @@ def upgrade() -> None:
         sa.Column("wallet_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column(
             "type",
-            sa.Enum("TOP_UP", "ORDER_PAYMENT", "REFUND", "MONTHLY_RESET", name="transactiontype"),
+            postgresql.ENUM(
+                "TOP_UP", "ORDER_PAYMENT", "REFUND", "MONTHLY_RESET",
+                name="transactiontype",
+                create_type=False,
+            ),
             nullable=False,
         ),
         sa.Column("amount", sa.Numeric(12, 2), nullable=False),
