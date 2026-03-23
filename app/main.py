@@ -5,6 +5,7 @@ FastAPI application — быстрый startup для Railway (устраняе�
 - /ready — readiness check: проверка БД через AsyncSessionLocal (SELECT 1, таймаут 3 сек)
 """
 import asyncio
+import os
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -23,6 +24,9 @@ app = FastAPI(
     version=settings.app_version,
     description="Self-service kiosk ordering system for inmates in Kazakhstan prisons",
     lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
 )
 
 register_middleware(app)
