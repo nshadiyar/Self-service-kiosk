@@ -1,16 +1,60 @@
 import json
 import logging
+import time
+from typing import Callable
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
 
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    """Middleware for logging HTTP requests and responses"""
+    
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        start_time = time.time()
+        
+        # Log request
+        logger.info(f"🔄 {request.method} {request.url.path} - Started")
+        
+        try:
+            response = await call_next(request)
+            
+            # Calculate response time
+            process_time = time.time() - start_time
+            
+            # Log response
+            status_emoji = "✅" if response.status_code < 400 else "❌"
+            logger.info(
+                f"{status_emoji} {request.method} {request.url.path} - "
+                f"Status: {response.status_code} - Time: {process_time:.3f}s"
+            )
+            
+            # Add timing header
+            response.headers["X-Process-Time"] = str(process_time)
+            
+            return response
+            
+        except Exception as e:
+            process_time = time.time() - start_time
+            logger.error(
+                f"💥 {request.method} {request.url.path} - "
+                f"Error: {str(e)} - Time: {process_time:.3f}s",
+                exc_info=True
+            )
+            raise
+
+
 def register_middleware(app: FastAPI):
+    # Add request logging middleware
+    app.add_middleware(RequestLoggingMiddleware)
+    
+    # Add CORS middleware
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.allowed_origins,
@@ -18,6 +62,8 @@ def register_middleware(app: FastAPI):
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    
+    # Add response wrapper middleware
     app.middleware("http")(response_wrapper_middleware)
 
 
