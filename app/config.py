@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     # App
     app_name: str = "Bromart Kiosk API"
     app_version: str = "1.0.0"
+    # Порт из PORT (Railway), fallback 8000 для локальной разработки
+    port: int = 8000
 
     # Logging
     log_level: str = "INFO"

@@ -1,7 +1,9 @@
 #!/bin/sh
 set -e
 
-# Миграции выполняются асинхронно в фоне при старте приложения (lifespan.py)
-# Не блокируем startup — приложение сразу готово к приёму запросов
-echo "Starting FastAPI on port ${PORT:-8000}..."
-exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}"
+# PORT задаётся Railway; локально используется 8000
+PORT="${PORT:-8000}"
+
+# Миграции — асинхронно в фоне (lifespan.py). Startup не блокируется
+echo "Starting FastAPI on 0.0.0.0:${PORT}..."
+exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT}"
