@@ -1,10 +1,14 @@
 from fastapi import FastAPI
 
 from app.config import settings
+from app.core.logging_config import setup_logging
 from app.core.lifespan import lifespan
 from app.core.middleware import register_middleware
 from app.core.exception_handlers import register_exception_handlers
 from app.api.v1.router import router as api_v1_router
+
+# Setup logging before creating the app
+setup_logging()
 
 app = FastAPI(
     title=settings.app_name,
