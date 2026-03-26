@@ -11,6 +11,13 @@ from app.core.enums import OrderStatus
 router = APIRouter(prefix="/orders", tags=["orders"])
 
 
+def _to_order_response(order) -> OrderResponse:
+    user_full_name = order.user.full_name if order.user else None
+    payload = OrderResponse.model_validate(order).model_dump()
+    payload["user_full_name"] = user_full_name
+    return OrderResponse(**payload)
+
+
 @router.get("", response_model=list[OrderResponse])
 async def list_orders(
     status: OrderStatus | None = Query(None),
@@ -27,7 +34,7 @@ async def list_orders(
     elif current_user.role.value == "PRISON_ADMIN" and current_user.facility_id:
         facility_filter = current_user.facility_id
     orders = await svc.list_orders(user_id=user_filter, facility_id=facility_filter, status=status, skip=skip, limit=limit)
-    return [OrderResponse.model_validate(o) for o in orders]
+    return [_to_order_response(o) for o in orders]
 
 
 @router.get("/{order_id}", response_model=OrderResponse)
@@ -44,7 +51,7 @@ async def get_order(
     if current_user.role.value == "PRISON_ADMIN" and current_user.facility_id != order.facility_id:
         from app.core.exceptions import AuthorizationError
         raise AuthorizationError("Access denied")
-    return OrderResponse.model_validate(order)
+    return _to_order_response(order)
 
 
 @router.post("", response_model=OrderResponse)
@@ -55,7 +62,7 @@ async def create_order(
 ):
     svc = OrderService(db)
     order = await svc.create(current_user, data)
-    return OrderResponse.model_validate(order)
+    return _to_order_response(order)
 
 
 @router.post("/{order_id}/approve", response_model=OrderResponse)
@@ -70,7 +77,7 @@ async def approve_order(
         from app.core.exceptions import AuthorizationError
         raise AuthorizationError("Access denied")
     order = await svc.approve(order_id)
-    return OrderResponse.model_validate(order)
+    return _to_order_response(order)
 
 
 @router.post("/{order_id}/reject", response_model=OrderResponse)
@@ -86,4 +93,4 @@ async def reject_order(
         from app.core.exceptions import AuthorizationError
         raise AuthorizationError("Access denied")
     order = await svc.reject(order_id, data.reason)
-    return OrderResponse.model_validate(order)
+    return _to_order_response(order)

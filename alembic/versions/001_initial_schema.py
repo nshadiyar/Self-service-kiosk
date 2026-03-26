@@ -47,7 +47,7 @@ def upgrade() -> None:
     _create_enum_if_not_exists("userrole", ["SUPER_ADMIN", "PRISON_ADMIN", "INMATE"])
     _create_enum_if_not_exists(
         "orderstatus",
-        ["PENDING", "APPROVED", "REJECTED", "FULFILLED", "CANCELLED"],
+        ["PENDING", "APPROVED", "REJECTED", "CANCELLED"],
     )
     _create_enum_if_not_exists(
         "transactiontype",
@@ -145,7 +145,7 @@ def upgrade() -> None:
         sa.Column(
             "status",
             postgresql.ENUM(
-                "PENDING", "APPROVED", "REJECTED", "FULFILLED", "CANCELLED",
+                "PENDING", "APPROVED", "REJECTED", "CANCELLED",
                 name="orderstatus",
                 create_type=False,
             ),

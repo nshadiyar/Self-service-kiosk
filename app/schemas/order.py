@@ -37,6 +37,7 @@ class OrderItemResponse(BaseModel):
 class OrderResponse(BaseModel):
     id: UUID
     user_id: UUID
+    user_full_name: str | None = None
     facility_id: UUID
     status: OrderStatus
     total_amount: Decimal

@@ -21,7 +21,9 @@ class OrderService:
 
     async def get_by_id(self, order_id: UUID) -> Order:
         result = await self.db.execute(
-            select(Order).where(Order.id == order_id).options(selectinload(Order.items))
+            select(Order)
+            .where(Order.id == order_id)
+            .options(selectinload(Order.items), selectinload(Order.user))
         )
         o = result.scalar_one_or_none()
         if not o:
@@ -36,7 +38,7 @@ class OrderService:
         skip: int = 0,
         limit: int = 20,
     ):
-        q = select(Order).options(selectinload(Order.items))
+        q = select(Order).options(selectinload(Order.items), selectinload(Order.user))
         if user_id is not None:
             q = q.where(Order.user_id == user_id)
         if facility_id is not None:
