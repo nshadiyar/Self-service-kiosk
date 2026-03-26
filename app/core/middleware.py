@@ -16,7 +16,7 @@ def register_middleware(app: FastAPI):
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.allowed_origins,
-        allow_credentials=True,
+        allow_credentials=False,  # JWT in Authorization header; cookie cross-origin not required
         allow_methods=["*"],
         allow_headers=["*"],
     )
