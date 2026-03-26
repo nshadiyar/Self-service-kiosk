@@ -4,10 +4,13 @@ from uuid import UUID
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.enums import TransactionType
+from app.core.enums import TransactionType, UserRole
 from app.core.exceptions import NotFoundError
+from app.models.facility import Facility
+from app.models.user import User
 from app.models.wallet import Wallet
 from app.models.wallet_transaction import WalletTransaction
+from app.schemas.wallet import InmateWalletResponse
 
 
 class WalletService:
@@ -46,3 +49,33 @@ class WalletService:
     async def reset_monthly_spending(self) -> None:
         await self.db.execute(text("UPDATE wallets SET monthly_spent = 0.00"))
         await self.db.commit()
+
+    async def list_inmate_wallets(
+        self,
+        facility_id: UUID | None = None,
+        skip: int = 0,
+        limit: int = 20,
+    ) -> list[InmateWalletResponse]:
+        query = (
+            select(
+                User.id.label("user_id"),
+                User.full_name,
+                User.iin,
+                User.facility_id,
+                Facility.name.label("facility_name"),
+                Wallet.balance,
+                Wallet.monthly_spent,
+                Wallet.monthly_limit,
+            )
+            .join(Wallet, Wallet.user_id == User.id)
+            .outerjoin(Facility, Facility.id == User.facility_id)
+            .where(User.role == UserRole.INMATE, User.is_active == True)
+            .offset(skip)
+            .limit(limit)
+        )
+        if facility_id is not None:
+            query = query.where(User.facility_id == facility_id)
+
+        result = await self.db.execute(query)
+        rows = result.mappings().all()
+        return [InmateWalletResponse(**row) for row in rows]
