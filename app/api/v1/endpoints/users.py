@@ -50,7 +50,8 @@ async def get_user(user_id: UUID, db=Depends(get_db), current_user=Depends(requi
 @router.post("", response_model=UserResponse)
 async def create_user(data: UserCreate, db=Depends(get_db), current_user=Depends(require_super_admin)):
     svc = UserService(db)
-    user = await svc.create(data)
+    created = await svc.create(data)
+    user = await svc.get_by_id(created.id)
     return _to_user_response(user)
 
 
@@ -63,5 +64,6 @@ async def update_user(user_id: UUID, data: UserUpdate, db=Depends(get_db), curre
         if user.facility_id != current_user.facility_id:
             raise AuthorizationError("Access denied")
     svc = UserService(db)
-    user = await svc.update(user_id, data)
+    updated = await svc.update(user_id, data)
+    user = await svc.get_by_id(updated.id)
     return _to_user_response(user)
