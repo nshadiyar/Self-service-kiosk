@@ -12,6 +12,15 @@ logger = logging.getLogger(__name__)
 UNWRAPPED_PATHS = {"/openapi.json", "/docs", "/redoc", "/health", "/ready", "/"}
 
 
+def _cors_headers_from(response: Response) -> dict[str, str]:
+    """Сохраняем CORS-заголовки при пересборке тела (CORSMiddleware добавляет их до обёртки)."""
+    return {
+        key: value
+        for key, value in response.headers.items()
+        if key.lower().startswith("access-control-")
+    }
+
+
 def register_middleware(app: FastAPI):
     app.add_middleware(
         CORSMiddleware,
@@ -51,16 +60,23 @@ async def response_wrapper_middleware(request: Request, call_next):
             chunks.append(chunk)
     body = b"".join(chunks)
 
+    cors = _cors_headers_from(response)
+
     if not body:
-        return Response(status_code=response.status_code, media_type="application/json")
+        return Response(
+            status_code=response.status_code,
+            media_type="application/json",
+            headers=cors,
+        )
 
     try:
         data = json.loads(body)
     except (json.JSONDecodeError, UnicodeDecodeError):
+        merged = {**dict(response.headers)}
         return Response(
             content=body,
             status_code=response.status_code,
-            headers=dict(response.headers),
+            headers=merged,
             media_type="application/json",
         )
 
@@ -68,4 +84,8 @@ async def response_wrapper_middleware(request: Request, call_next):
     if not isinstance(data, dict) or "success" not in data:
         data = {"success": True, "data": data, "message": "Success"}
 
-    return JSONResponse(content=data, status_code=response.status_code)
+    return JSONResponse(
+        content=data,
+        status_code=response.status_code,
+        headers=cors,
+    )
