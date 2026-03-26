@@ -59,6 +59,7 @@ class UserResponse(BaseModel):
     full_name: str
     role: UserRole
     facility_id: UUID | None
+    facility_name: str | None = None
     iin: str | None
     photo_url: str | None
     transfer_date: date | None

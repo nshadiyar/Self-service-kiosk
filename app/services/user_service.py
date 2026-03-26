@@ -2,6 +2,7 @@ from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.enums import UserRole
 from app.core.security import get_password_hash
@@ -16,7 +17,9 @@ class UserService:
         self.db = db
 
     async def get_by_id(self, user_id: UUID) -> User:
-        result = await self.db.execute(select(User).where(User.id == user_id))
+        result = await self.db.execute(
+            select(User).options(selectinload(User.facility)).where(User.id == user_id)
+        )
         user = result.scalar_one_or_none()
         if not user:
             raise NotFoundError("User not found")
@@ -30,10 +33,18 @@ class UserService:
         result = await self.db.execute(select(User).where(User.iin == iin))
         return result.scalar_one_or_none()
 
-    async def list_users(self, facility_id: UUID | None = None, skip: int = 0, limit: int = 20):
-        q = select(User).where(User.is_active == True)
+    async def list_users(
+        self,
+        facility_id: UUID | None = None,
+        role: UserRole | None = None,
+        skip: int = 0,
+        limit: int = 20,
+    ):
+        q = select(User).options(selectinload(User.facility)).where(User.is_active == True)
         if facility_id is not None:
             q = q.where(User.facility_id == facility_id)
+        if role is not None:
+            q = q.where(User.role == role)
         q = q.offset(skip).limit(limit)
         result = await self.db.execute(q)
         return list(result.scalars().all())
