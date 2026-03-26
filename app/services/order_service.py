@@ -23,7 +23,7 @@ class OrderService:
         result = await self.db.execute(
             select(Order)
             .where(Order.id == order_id)
-            .options(selectinload(Order.items), selectinload(Order.user))
+            .options(selectinload(Order.items), selectinload(Order.user), selectinload(Order.facility))
         )
         o = result.scalar_one_or_none()
         if not o:
@@ -38,7 +38,7 @@ class OrderService:
         skip: int = 0,
         limit: int = 20,
     ):
-        q = select(Order).options(selectinload(Order.items), selectinload(Order.user))
+        q = select(Order).options(selectinload(Order.items), selectinload(Order.user), selectinload(Order.facility))
         if user_id is not None:
             q = q.where(Order.user_id == user_id)
         if facility_id is not None:

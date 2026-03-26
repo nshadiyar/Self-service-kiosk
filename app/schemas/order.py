@@ -39,6 +39,7 @@ class OrderResponse(BaseModel):
     user_id: UUID
     user_full_name: str | None = None
     facility_id: UUID
+    facility_name: str | None = None
     status: OrderStatus
     total_amount: Decimal
     rejection_reason: str | None

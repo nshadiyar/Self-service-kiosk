@@ -13,8 +13,10 @@ router = APIRouter(prefix="/orders", tags=["orders"])
 
 def _to_order_response(order) -> OrderResponse:
     user_full_name = order.user.full_name if order.user else None
+    facility_name = order.facility.name if order.facility else None
     payload = OrderResponse.model_validate(order).model_dump()
     payload["user_full_name"] = user_full_name
+    payload["facility_name"] = facility_name
     return OrderResponse(**payload)
 
 
