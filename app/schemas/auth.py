@@ -1,5 +1,7 @@
 from pydantic import BaseModel
 
+from app.core.enums import UserRole
+
 
 class LoginRequest(BaseModel):
     """Login by email or IIN (12 digits)."""
@@ -12,6 +14,7 @@ class Token(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
+    user_role: UserRole
 
 
 class RefreshRequest(BaseModel):

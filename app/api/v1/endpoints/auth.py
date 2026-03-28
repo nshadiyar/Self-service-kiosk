@@ -11,15 +11,15 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/login", response_model=Token)
 async def login(data: LoginRequest, db=Depends(get_db)):
     svc = AuthService(db)
-    access, refresh = await svc.login(data.login, data.password)
-    return Token(access_token=access, refresh_token=refresh)
+    access, refresh, user_role = await svc.login(data.login, data.password)
+    return Token(access_token=access, refresh_token=refresh, user_role=user_role)
 
 
 @router.post("/refresh", response_model=Token)
 async def refresh(data: RefreshRequest, db=Depends(get_db)):
     svc = AuthService(db)
-    access, refresh = await svc.refresh_tokens(data.refresh_token)
-    return Token(access_token=access, refresh_token=refresh)
+    access, refresh, user_role = await svc.refresh_tokens(data.refresh_token)
+    return Token(access_token=access, refresh_token=refresh, user_role=user_role)
 
 
 @router.get("/me")

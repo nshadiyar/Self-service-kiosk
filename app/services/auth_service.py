@@ -27,15 +27,15 @@ class AuthService:
             result = await self.db.execute(select(User).where(User.iin == login, User.is_active == True))
         return result.scalar_one_or_none()
 
-    async def login(self, login: str, password: str) -> tuple[str, str]:
+    async def login(self, login: str, password: str) -> tuple[str, str, UserRole]:
         user = await self._find_user_by_login(login)
         if not user or not verify_password(password, user.hashed_password):
             raise AuthenticationError("Invalid login or password")
         access = create_access_token(user.id)
         refresh = create_refresh_token(user.id)
-        return access, refresh
+        return access, refresh, user.role
 
-    async def refresh_tokens(self, refresh_token: str) -> tuple[str, str]:
+    async def refresh_tokens(self, refresh_token: str) -> tuple[str, str, UserRole]:
         payload = verify_token(refresh_token)
         if payload.get("type") != "refresh":
             raise AuthenticationError("Invalid refresh token")
@@ -50,4 +50,4 @@ class AuthService:
         user = result.scalar_one_or_none()
         if not user:
             raise AuthenticationError("User not found")
-        return create_access_token(user.id), create_refresh_token(user.id)
+        return create_access_token(user.id), create_refresh_token(user.id), user.role
