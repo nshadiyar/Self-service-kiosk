@@ -7,6 +7,7 @@ FastAPI application — быстрый startup для Railway (устраняе�
 import asyncio
 import os
 from fastapi import FastAPI
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
@@ -27,6 +28,7 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
+    swagger_ui_parameters={"persistAuthorization": True},
 )
 
 register_middleware(app)
@@ -66,3 +68,41 @@ async def ready():
             {"status": "degraded", "database": str(e)},
             status_code=503,
         )
+
+
+def custom_openapi():
+    """OpenAPI: кнопка Authorize в Swagger (Bearer JWT) для защищённых эндпоинтов."""
+    if app.openapi_schema:
+        return app.openapi_schema
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        openapi_version=getattr(app, "openapi_version", "3.1.0"),
+        description=app.description,
+        routes=app.routes,
+    )
+    openapi_schema.setdefault("components", {}).setdefault("securitySchemes", {})["BearerAuth"] = {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Access token из POST /api/v1/auth/login (поле access_token). Вставь только токен, без префикса Bearer.",
+    }
+    public_routes = {
+        ("/", "get"),
+        ("/health", "get"),
+        ("/ready", "get"),
+        ("/api/v1/auth/login", "post"),
+        ("/api/v1/auth/refresh", "post"),
+    }
+    for path, path_item in openapi_schema.get("paths", {}).items():
+        for method in ("get", "post", "put", "patch", "delete"):
+            if method not in path_item:
+                continue
+            if (path, method) in public_routes:
+                continue
+            path_item[method].setdefault("security", []).append({"BearerAuth": []})
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
