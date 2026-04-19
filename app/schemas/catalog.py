@@ -5,6 +5,18 @@ from uuid import UUID
 from pydantic import BaseModel, field_serializer
 
 
+class VendorResponse(BaseModel):
+    id: UUID
+    code: str
+    name: str
+    logo_url: str | None
+    category_id: UUID | None
+    sort_order: int
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
 class CategoryResponse(BaseModel):
     id: UUID
     name: str
@@ -24,6 +36,7 @@ class ProductResponse(BaseModel):
     price: Decimal
     stock_quantity: int
     image_url: str | None
+    vendor_id: UUID | None
     is_active: bool
 
     model_config = {"from_attributes": True}

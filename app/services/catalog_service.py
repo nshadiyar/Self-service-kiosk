@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import NotFoundError
 from app.models.category import Category
 from app.models.product import Product
+from app.models.vendor import Vendor
 
 
 class CatalogService:
@@ -28,6 +29,7 @@ class CatalogService:
         self,
         category_id: UUID | None = None,
         facility_id: UUID | None = None,
+        vendor_id: UUID | None = None,
         skip: int = 0,
         limit: int = 50,
     ) -> list[Product]:
@@ -36,9 +38,25 @@ class CatalogService:
             q = q.where(Product.category_id == category_id)
         if facility_id is not None:
             q = q.where((Product.facility_id == facility_id) | (Product.facility_id.is_(None)))
+        if vendor_id is not None:
+            q = q.where(Product.vendor_id == vendor_id)
         q = q.offset(skip).limit(limit)
         result = await self.db.execute(q)
         return list(result.scalars().all())
+
+    async def list_vendors(self, category_id: UUID | None = None) -> list[Vendor]:
+        q = select(Vendor).where(Vendor.is_active == True).order_by(Vendor.sort_order)
+        if category_id is not None:
+            q = q.where(Vendor.category_id == category_id)
+        result = await self.db.execute(q)
+        return list(result.scalars().all())
+
+    async def get_vendor(self, vendor_id: UUID) -> Vendor:
+        result = await self.db.execute(select(Vendor).where(Vendor.id == vendor_id))
+        v = result.scalar_one_or_none()
+        if not v:
+            raise NotFoundError("Vendor not found")
+        return v
 
     async def get_product(self, product_id: UUID) -> Product:
         result = await self.db.execute(select(Product).where(Product.id == product_id))
