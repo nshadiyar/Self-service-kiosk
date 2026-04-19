@@ -9,6 +9,7 @@ class CategoryResponse(BaseModel):
     id: UUID
     name: str
     description: str | None
+    icon_url: str | None
     sort_order: int
     is_active: bool
 
