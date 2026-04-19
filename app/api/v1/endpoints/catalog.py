@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 
 from app.dependencies import get_db
-from app.schemas.catalog import CategoryResponse, ProductResponse, VendorResponse
+from app.schemas.catalog import CategoryResponse, ProductResponse, VendorResponse, VendorDetailResponse
 from app.services.catalog_service import CatalogService
 from app.core.security import require_any_user, get_current_user_dep
 
@@ -42,7 +42,7 @@ async def list_vendors(
     return [VendorResponse.model_validate(v) for v in vendors]
 
 
-@router.get("/vendors/{vendor_id}", response_model=VendorResponse)
+@router.get("/vendors/{vendor_id}", response_model=VendorDetailResponse)
 async def get_vendor(
     vendor_id: UUID,
     db=Depends(get_db),
@@ -50,13 +50,14 @@ async def get_vendor(
 ):
     svc = CatalogService(db)
     vendor = await svc.get_vendor(vendor_id)
-    return VendorResponse.model_validate(vendor)
+    return VendorDetailResponse.model_validate(vendor)
 
 
 @router.get("/products", response_model=list[ProductResponse])
 async def list_products(
     category_id: UUID | None = Query(None),
     vendor_id: UUID | None = Query(None),
+    sort: str = Query("asc", pattern="^(asc|desc)$"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     db=Depends(get_db),
@@ -64,7 +65,7 @@ async def list_products(
 ):
     svc = CatalogService(db)
     facility_id = current_user.facility_id if current_user.role.value == "PRISON_ADMIN" else None
-    products = await svc.list_products(category_id=category_id, facility_id=facility_id, vendor_id=vendor_id, skip=skip, limit=limit)
+    products = await svc.list_products(category_id=category_id, facility_id=facility_id, vendor_id=vendor_id, sort=sort, skip=skip, limit=limit)
     return [ProductResponse.model_validate(p) for p in products]
 
 

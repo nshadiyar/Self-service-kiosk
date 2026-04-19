@@ -5,6 +5,22 @@ from uuid import UUID
 from pydantic import BaseModel, field_serializer
 
 
+class VendorProductResponse(BaseModel):
+    id: UUID
+    name: str
+    description: str | None
+    price: Decimal
+    image_url: str | None
+    stock_quantity: int
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+    @field_serializer("price")
+    def serialize_decimal(self, v: Decimal) -> float:
+        return float(v)
+
+
 class VendorResponse(BaseModel):
     id: UUID
     code: str
@@ -15,6 +31,10 @@ class VendorResponse(BaseModel):
     is_active: bool
 
     model_config = {"from_attributes": True}
+
+
+class VendorDetailResponse(VendorResponse):
+    products: list[VendorProductResponse] = []
 
 
 class CategoryResponse(BaseModel):

@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
@@ -30,6 +31,7 @@ class CatalogService:
         category_id: UUID | None = None,
         facility_id: UUID | None = None,
         vendor_id: UUID | None = None,
+        sort: str = "asc",
         skip: int = 0,
         limit: int = 50,
     ) -> list[Product]:
@@ -40,6 +42,7 @@ class CatalogService:
             q = q.where((Product.facility_id == facility_id) | (Product.facility_id.is_(None)))
         if vendor_id is not None:
             q = q.where(Product.vendor_id == vendor_id)
+        q = q.order_by(Product.price.asc() if sort == "asc" else Product.price.desc())
         q = q.offset(skip).limit(limit)
         result = await self.db.execute(q)
         return list(result.scalars().all())
@@ -52,7 +55,11 @@ class CatalogService:
         return list(result.scalars().all())
 
     async def get_vendor(self, vendor_id: UUID) -> Vendor:
-        result = await self.db.execute(select(Vendor).where(Vendor.id == vendor_id))
+        result = await self.db.execute(
+            select(Vendor)
+            .options(selectinload(Vendor.products))
+            .where(Vendor.id == vendor_id)
+        )
         v = result.scalar_one_or_none()
         if not v:
             raise NotFoundError("Vendor not found")
