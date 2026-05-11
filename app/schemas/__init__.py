@@ -1,5 +1,11 @@
 from app.schemas.auth import Token, TokenPayload, LoginRequest, RefreshRequest, FaceLoginResponse
-from app.schemas.user import UserCreate, UserUpdate, UserResponse, UserPhotoUploadResponse
+from app.schemas.user import (
+    UserCreate,
+    UserUpdate,
+    UserResponse,
+    UserPhotoUploadResponse,
+    InmateCreateWithPhotoResponse,
+)
 from app.schemas.facility import FacilityCreate, FacilityUpdate, FacilityResponse
 from app.schemas.catalog import CategoryResponse, ProductResponse
 from app.schemas.order import OrderCreate, OrderResponse, OrderItemCreate, OrderItemResponse

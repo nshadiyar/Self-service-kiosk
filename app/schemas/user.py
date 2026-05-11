@@ -79,3 +79,8 @@ class UserPhotoUploadResponse(BaseModel):
     photo_object_key: str
     biometric_enrolled: bool
     biometric_provider: str
+
+
+class InmateCreateWithPhotoResponse(UserResponse):
+    biometric_enrolled: bool
+    biometric_provider: str
