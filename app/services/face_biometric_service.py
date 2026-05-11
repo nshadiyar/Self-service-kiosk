@@ -5,6 +5,8 @@ from uuid import UUID
 
 import cv2
 import numpy as np
+import torch
+from facenet_pytorch import InceptionResnetV1, MTCNN
 from PIL import Image, ImageOps
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,12 +28,29 @@ class FaceFeatureSample:
 
 
 class FaceBiometricService:
+    _device = torch.device("cpu")
+    _mtcnn: MTCNN | None = None
+    _resnet: InceptionResnetV1 | None = None
+
     def __init__(self, db: AsyncSession):
         self.db = db
-        self._face_cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-        )
-        self._eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_eye.xml")
+        self._ensure_model_loaded()
+
+    @classmethod
+    def _ensure_model_loaded(cls) -> None:
+        if cls._mtcnn is not None and cls._resnet is not None:
+            return
+        try:
+            cls._mtcnn = MTCNN(
+                image_size=160,
+                margin=20,
+                keep_all=False,
+                post_process=True,
+                device=cls._device,
+            )
+            cls._resnet = InceptionResnetV1(pretrained="vggface2").eval().to(cls._device)
+        except Exception as exc:
+            raise ValidationError(f"Face model initialization failed: {exc}") from exc
 
     async def enroll_user_photo(self, *, user: User, photo_object_key: str, file_bytes: bytes) -> FaceBiometric:
         if user.role != UserRole.INMATE:
@@ -51,7 +70,7 @@ class FaceBiometricService:
             photo_object_key=photo_object_key,
             face_signature=json.dumps(sample.descriptor.tolist()),
             provider=settings.face_provider_name,
-            provider_version="2",
+            provider_version="1",
             quality_score=sample.quality_score,
             is_active=True,
         )
@@ -87,7 +106,7 @@ class FaceBiometricService:
             raise AuthenticationError("No enrolled face biometrics found")
 
         best_match: FaceBiometric | None = None
-        best_score = 0.0
+        best_score = -1.0
         for biometric in biometrics:
             descriptor = np.asarray(json.loads(biometric.face_signature), dtype=np.float32)
             score = self._cosine_similarity(sample.descriptor, descriptor)
@@ -99,7 +118,7 @@ class FaceBiometricService:
             await self._log_attempt(
                 user_id=None,
                 facility_id=facility_id,
-                score=best_score,
+                score=best_score if best_score >= 0 else None,
                 liveness_score=sample.liveness_score,
                 success=False,
                 failure_reason="Face match threshold not reached",
@@ -140,23 +159,36 @@ class FaceBiometricService:
         await self.db.flush()
 
     def _extract_face_sample(self, file_bytes: bytes, *, enforce_liveness: bool) -> FaceFeatureSample:
-        image_bgr = self._load_image(file_bytes)
+        image = self._load_image(file_bytes)
+        image_bgr = cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2BGR)
         gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
-        faces = self._face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(80, 80))
-        if len(faces) != 1:
+
+        if self._mtcnn is None or self._resnet is None:
+            raise ValidationError("Face model is not initialized")
+
+        boxes, probs, landmarks = self._mtcnn.detect(image, landmarks=True)
+        if boxes is None or len(boxes) != 1:
             raise ValidationError("Exactly one face must be visible in the image")
 
-        x, y, w, h = faces[0]
+        x1, y1, x2, y2 = boxes[0]
+        x1_i = max(0, int(round(x1)))
+        y1_i = max(0, int(round(y1)))
+        x2_i = min(gray.shape[1], int(round(x2)))
+        y2_i = min(gray.shape[0], int(round(y2)))
+
+        width = max(1, x2_i - x1_i)
+        height = max(1, y2_i - y1_i)
         image_area = float(gray.shape[0] * gray.shape[1])
-        face_area_ratio = (w * h) / image_area
+        face_area_ratio = (width * height) / image_area
         if face_area_ratio < settings.face_login_min_face_area_ratio:
             raise ValidationError("Face is too small in the image")
 
-        face_roi = gray[y : y + h, x : x + w]
+        face_roi = gray[y1_i:y2_i, x1_i:x2_i]
         blur_variance = float(cv2.Laplacian(face_roi, cv2.CV_64F).var())
         brightness = float(face_roi.mean())
-        eyes = self._eye_cascade.detectMultiScale(face_roi, scaleFactor=1.1, minNeighbors=4, minSize=(18, 18))
-        eye_count = len(eyes)
+        eye_count = 0
+        if landmarks is not None and len(landmarks) == 1:
+            eye_count = 1 if len(landmarks[0]) >= 2 else 0
 
         quality_score = self._normalize_quality(
             blur_variance=blur_variance,
@@ -180,37 +212,31 @@ class FaceBiometricService:
         else:
             liveness_score = None
 
-        descriptor = self._extract_hog_descriptor(face_roi)
+        face_tensor = self._mtcnn(image)
+        if face_tensor is None:
+            raise ValidationError("Unable to extract face crop for embedding")
+
+        with torch.no_grad():
+            embedding = self._resnet(face_tensor.unsqueeze(0).to(self._device)).cpu().numpy()[0]
+
+        descriptor = embedding.astype(np.float32)
+        norm = np.linalg.norm(descriptor)
+        if norm == 0:
+            raise ValidationError("Unable to extract stable face embedding")
+        descriptor = descriptor / norm
+
         return FaceFeatureSample(
             descriptor=descriptor,
             quality_score=quality_score,
             liveness_score=liveness_score,
         )
 
-    def _load_image(self, file_bytes: bytes) -> np.ndarray:
+    def _load_image(self, file_bytes: bytes) -> Image.Image:
         try:
             image = Image.open(BytesIO(file_bytes))
-            image = ImageOps.exif_transpose(image).convert("RGB")
+            return ImageOps.exif_transpose(image).convert("RGB")
         except Exception as exc:
             raise ValidationError(f"Invalid image file: {exc}") from exc
-
-        rgb = np.asarray(image)
-        return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
-
-    def _extract_hog_descriptor(self, face_roi: np.ndarray) -> np.ndarray:
-        normalized = cv2.resize(face_roi, (128, 128), interpolation=cv2.INTER_AREA)
-        hog = cv2.HOGDescriptor(
-            _winSize=(128, 128),
-            _blockSize=(32, 32),
-            _blockStride=(16, 16),
-            _cellSize=(16, 16),
-            _nbins=9,
-        )
-        descriptor = hog.compute(normalized).flatten().astype(np.float32)
-        norm = np.linalg.norm(descriptor)
-        if norm == 0:
-            raise ValidationError("Unable to extract stable face descriptor")
-        return descriptor / norm
 
     def _cosine_similarity(self, a: np.ndarray, b: np.ndarray) -> float:
         if a.shape != b.shape:
