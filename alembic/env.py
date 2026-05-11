@@ -18,9 +18,12 @@ from app.models import (
     Wallet,
     Category,
     Product,
+    Vendor,
     Order,
     OrderItem,
     WalletTransaction,
+    FaceBiometric,
+    FaceAuthAttempt,
 )
 
 config = context.config

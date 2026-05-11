@@ -22,3 +22,4 @@ class Facility(Base):
     users = relationship("User", back_populates="facility")
     products = relationship("Product", back_populates="facility")
     orders = relationship("Order", back_populates="facility")
+    face_auth_attempts = relationship("FaceAuthAttempt", back_populates="facility")

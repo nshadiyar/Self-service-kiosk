@@ -20,6 +20,7 @@ class User(Base):
     facility_id = Column(UUID(as_uuid=True), ForeignKey("facilities.id"), nullable=True)
     iin = Column(String(12), unique=True, nullable=True, index=True)
     photo_url = Column(String(500), nullable=True)
+    photo_object_key = Column(String(500), nullable=True)
     transfer_date = Column(Date, nullable=True)
     release_date = Column(Date, nullable=True)
     is_active = Column(Boolean, default=True)
@@ -29,3 +30,5 @@ class User(Base):
     facility = relationship("Facility", back_populates="users")
     wallet = relationship("Wallet", back_populates="user", uselist=False)
     orders = relationship("Order", back_populates="user")
+    face_biometrics = relationship("FaceBiometric", back_populates="user", cascade="all, delete-orphan")
+    face_auth_attempts = relationship("FaceAuthAttempt", back_populates="user")

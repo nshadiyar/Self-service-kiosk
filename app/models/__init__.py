@@ -3,9 +3,12 @@ from app.models.facility import Facility
 from app.models.wallet import Wallet
 from app.models.category import Category
 from app.models.product import Product
+from app.models.vendor import Vendor
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.wallet_transaction import WalletTransaction
+from app.models.face_biometric import FaceBiometric
+from app.models.face_auth_attempt import FaceAuthAttempt
 
 __all__ = [
     "User",
@@ -13,7 +16,10 @@ __all__ = [
     "Wallet",
     "Category",
     "Product",
+    "Vendor",
     "Order",
     "OrderItem",
     "WalletTransaction",
+    "FaceBiometric",
+    "FaceAuthAttempt",
 ]

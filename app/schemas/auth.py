@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from uuid import UUID
 
 from app.core.enums import UserRole
 
@@ -24,3 +25,9 @@ class RefreshRequest(BaseModel):
 class TokenPayload(BaseModel):
     sub: str
     type: str
+
+
+class FaceLoginResponse(Token):
+    matched_user_id: UUID
+    match_score: float
+    provider: str

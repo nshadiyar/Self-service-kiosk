@@ -65,6 +65,7 @@ class UserService:
             facility_id=data.facility_id,
             iin=data.iin,
             photo_url=data.photo_url,
+            photo_object_key=data.photo_object_key,
             transfer_date=data.transfer_date,
             release_date=data.release_date,
         )
@@ -95,12 +96,22 @@ class UserService:
             user.iin = new_iin
         if data.photo_url is not None:
             user.photo_url = data.photo_url
+        if data.photo_object_key is not None:
+            user.photo_object_key = data.photo_object_key
         if data.transfer_date is not None:
             user.transfer_date = data.transfer_date
         if data.release_date is not None:
             user.release_date = data.release_date
         if data.is_active is not None:
             user.is_active = data.is_active
+        await self.db.flush()
+        await self.db.refresh(user)
+        return user
+
+    async def update_photo(self, user_id: UUID, photo_url: str, photo_object_key: str) -> User:
+        user = await self.get_by_id(user_id)
+        user.photo_url = photo_url
+        user.photo_object_key = photo_object_key
         await self.db.flush()
         await self.db.refresh(user)
         return user

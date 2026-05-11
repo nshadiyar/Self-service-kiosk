@@ -1,4 +1,5 @@
 import os
+from urllib.parse import urlparse
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -68,6 +69,60 @@ class Settings(BaseSettings):
     # Pagination
     default_page_size: int = 20
     max_page_size: int = 100
+
+    # MinIO / S3
+    minio_browser_redirect_url: str | None = None
+    minio_private_endpoint: str | None = None
+    minio_private_host: str | None = None
+    minio_private_port: int | None = None
+    minio_public_endpoint: str | None = None
+    minio_public_host: str | None = None
+    minio_public_port: int | None = None
+    minio_root_user: str | None = None
+    minio_root_password: str | None = None
+    minio_bucket_name: str = "inmate-photos"
+    face_provider_name: str = "opencv_haar_hog_v2"
+    face_match_threshold: float = 0.82
+    face_login_min_blur_variance: float = 90.0
+    face_login_min_brightness: float = 45.0
+    face_login_max_brightness: float = 210.0
+    face_login_min_face_area_ratio: float = 0.05
+    face_login_min_eye_count: int = 1
+
+    @property
+    def s3_endpoint(self) -> str | None:
+        """
+        Use the Railway private endpoint only when actually running on Railway.
+        For local Docker and host-based development, use the public endpoint.
+        """
+        in_railway = bool(os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("RAILWAY_PROJECT_ID"))
+        if in_railway and self.minio_private_endpoint:
+            return self.minio_private_endpoint
+        return self.minio_public_endpoint or self.minio_private_endpoint
+
+    @property
+    def s3_access_key(self) -> str | None:
+        return self.minio_root_user
+
+    @property
+    def s3_secret_key(self) -> str | None:
+        return self.minio_root_password
+
+    @property
+    def s3_secure(self) -> bool:
+        endpoint = self.s3_endpoint or ""
+        return endpoint.startswith("https://")
+
+    @property
+    def s3_client_endpoint(self) -> str | None:
+        """Return MinIO-compatible endpoint in host[:port] format without scheme."""
+        endpoint = self.s3_endpoint
+        if not endpoint:
+            return None
+        parsed = urlparse(endpoint)
+        if parsed.netloc:
+            return parsed.netloc
+        return endpoint.replace("http://", "").replace("https://", "")
 
 
 settings = Settings()

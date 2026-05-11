@@ -1,5 +1,6 @@
 from uuid import UUID
 
+from app.config import settings
 from app.core.security import (
     verify_password,
     get_password_hash,
@@ -10,6 +11,7 @@ from app.core.security import (
 from app.core.exceptions import AuthenticationError
 from app.core.enums import UserRole
 from app.models.user import User
+from app.services.face_biometric_service import FaceBiometricService
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -51,3 +53,10 @@ class AuthService:
         if not user:
             raise AuthenticationError("User not found")
         return create_access_token(user.id), create_refresh_token(user.id), user.role
+
+    async def face_login(self, *, file_bytes: bytes, facility_id: UUID | None) -> tuple[str, str, UserRole, UUID, float, str]:
+        face_service = FaceBiometricService(self.db)
+        user, match_score = await face_service.authenticate(file_bytes=file_bytes, facility_id=facility_id)
+        access = create_access_token(user.id)
+        refresh = create_refresh_token(user.id)
+        return access, refresh, user.role, user.id, match_score, settings.face_provider_name

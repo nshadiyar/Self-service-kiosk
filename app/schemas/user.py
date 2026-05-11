@@ -24,6 +24,7 @@ class UserBase(BaseModel):
     facility_id: UUID | None = None
     iin: str | None = None
     photo_url: str | None = None
+    photo_object_key: str | None = None
     transfer_date: date | None = None
     release_date: date | None = None
 
@@ -43,6 +44,7 @@ class UserUpdate(BaseModel):
     facility_id: UUID | None = None
     iin: str | None = None
     photo_url: str | None = None
+    photo_object_key: str | None = None
     transfer_date: date | None = None
     release_date: date | None = None
     is_active: bool | None = None
@@ -62,9 +64,18 @@ class UserResponse(BaseModel):
     facility_name: str | None = None
     iin: str | None
     photo_url: str | None
+    photo_object_key: str | None
     transfer_date: date | None
     release_date: date | None
     is_active: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class UserPhotoUploadResponse(BaseModel):
+    user_id: UUID
+    photo_url: str
+    photo_object_key: str
+    biometric_enrolled: bool
+    biometric_provider: str
