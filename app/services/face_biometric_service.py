@@ -5,8 +5,7 @@ from uuid import UUID
 
 import cv2
 import numpy as np
-import torch
-from facenet_pytorch import InceptionResnetV1, MTCNN
+from insightface.app import FaceAnalysis
 from PIL import Image, ImageOps
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,9 +27,7 @@ class FaceFeatureSample:
 
 
 class FaceBiometricService:
-    _device = torch.device("cpu")
-    _mtcnn: MTCNN | None = None
-    _resnet: InceptionResnetV1 | None = None
+    _analysis_app: FaceAnalysis | None = None
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -38,17 +35,15 @@ class FaceBiometricService:
 
     @classmethod
     def _ensure_model_loaded(cls) -> None:
-        if cls._mtcnn is not None and cls._resnet is not None:
+        if cls._analysis_app is not None:
             return
         try:
-            cls._mtcnn = MTCNN(
-                image_size=160,
-                margin=20,
-                keep_all=False,
-                post_process=True,
-                device=cls._device,
+            app = FaceAnalysis(
+                name=settings.face_model_name,
+                providers=["CPUExecutionProvider"],
             )
-            cls._resnet = InceptionResnetV1(pretrained="vggface2").eval().to(cls._device)
+            app.prepare(ctx_id=0, det_size=(640, 640))
+            cls._analysis_app = app
         except Exception as exc:
             raise ValidationError(f"Face model initialization failed: {exc}") from exc
 
@@ -159,36 +154,43 @@ class FaceBiometricService:
         await self.db.flush()
 
     def _extract_face_sample(self, file_bytes: bytes, *, enforce_liveness: bool) -> FaceFeatureSample:
-        image = self._load_image(file_bytes)
-        image_bgr = cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2BGR)
-        gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
-
-        if self._mtcnn is None or self._resnet is None:
+        if self._analysis_app is None:
             raise ValidationError("Face model is not initialized")
 
-        boxes, probs, landmarks = self._mtcnn.detect(image, landmarks=True)
-        if boxes is None or len(boxes) != 1:
+        image = self._load_image(file_bytes)
+        rgb = np.asarray(image)
+        bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+        gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+
+        faces = self._analysis_app.get(bgr)
+        if len(faces) != 1:
             raise ValidationError("Exactly one face must be visible in the image")
 
-        x1, y1, x2, y2 = boxes[0]
-        x1_i = max(0, int(round(x1)))
-        y1_i = max(0, int(round(y1)))
-        x2_i = min(gray.shape[1], int(round(x2)))
-        y2_i = min(gray.shape[0], int(round(y2)))
+        face = faces[0]
+        bbox = getattr(face, "bbox", None)
+        embedding = getattr(face, "embedding", None)
+        kps = getattr(face, "kps", None)
 
-        width = max(1, x2_i - x1_i)
-        height = max(1, y2_i - y1_i)
+        if bbox is None or embedding is None:
+            raise ValidationError("Face model did not return a usable embedding")
+
+        x1, y1, x2, y2 = [int(round(v)) for v in bbox]
+        x1 = max(0, x1)
+        y1 = max(0, y1)
+        x2 = min(gray.shape[1], x2)
+        y2 = min(gray.shape[0], y2)
+
+        width = max(1, x2 - x1)
+        height = max(1, y2 - y1)
         image_area = float(gray.shape[0] * gray.shape[1])
         face_area_ratio = (width * height) / image_area
         if face_area_ratio < settings.face_login_min_face_area_ratio:
             raise ValidationError("Face is too small in the image")
 
-        face_roi = gray[y1_i:y2_i, x1_i:x2_i]
+        face_roi = gray[y1:y2, x1:x2]
         blur_variance = float(cv2.Laplacian(face_roi, cv2.CV_64F).var())
         brightness = float(face_roi.mean())
-        eye_count = 0
-        if landmarks is not None and len(landmarks) == 1:
-            eye_count = 1 if len(landmarks[0]) >= 2 else 0
+        eye_count = 1 if kps is not None and len(kps) >= 2 else 0
 
         quality_score = self._normalize_quality(
             blur_variance=blur_variance,
@@ -212,14 +214,7 @@ class FaceBiometricService:
         else:
             liveness_score = None
 
-        face_tensor = self._mtcnn(image)
-        if face_tensor is None:
-            raise ValidationError("Unable to extract face crop for embedding")
-
-        with torch.no_grad():
-            embedding = self._resnet(face_tensor.unsqueeze(0).to(self._device)).cpu().numpy()[0]
-
-        descriptor = embedding.astype(np.float32)
+        descriptor = np.asarray(embedding, dtype=np.float32)
         norm = np.linalg.norm(descriptor)
         if norm == 0:
             raise ValidationError("Unable to extract stable face embedding")

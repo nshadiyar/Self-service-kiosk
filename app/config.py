@@ -81,8 +81,9 @@ class Settings(BaseSettings):
     minio_root_user: str | None = None
     minio_root_password: str | None = None
     minio_bucket_name: str = "inmate-photos"
-    face_provider_name: str = "facenet_mtcnn_v1"
-    face_match_threshold: float = 0.72
+    face_provider_name: str = "insightface_arcface_v1"
+    face_model_name: str = "buffalo_l"
+    face_match_threshold: float = 0.58
     face_login_min_blur_variance: float = 55.0
     face_login_min_brightness: float = 45.0
     face_login_max_brightness: float = 210.0
