@@ -73,14 +73,6 @@ class UserResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class UserPhotoUploadResponse(BaseModel):
-    user_id: UUID
-    photo_url: str
-    photo_object_key: str
-    biometric_enrolled: bool
-    biometric_provider: str
-
-
 class InmateCreateWithPhotoResponse(UserResponse):
     biometric_enrolled: bool
     biometric_provider: str

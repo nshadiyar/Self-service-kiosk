@@ -98,6 +98,16 @@ class MinioStorageService:
         except (S3Error, MinioException, Exception) as exc:
             raise ValidationError(f"MinIO download failed: {exc}") from exc
 
+    def delete_object(self, object_key: str) -> None:
+        try:
+            self.client.remove_object(self.bucket_name, object_key)
+        except S3Error as exc:
+            if getattr(exc, "code", None) == "NoSuchKey":
+                return
+            raise ValidationError(f"MinIO delete failed: {exc}") from exc
+        except (MinioException, Exception) as exc:
+            raise ValidationError(f"MinIO delete failed: {exc}") from exc
+
     def build_public_url(self, object_key: str) -> str:
         if settings.minio_public_endpoint:
             base = settings.minio_public_endpoint.rstrip("/")

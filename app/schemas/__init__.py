@@ -3,7 +3,6 @@ from app.schemas.user import (
     UserCreate,
     UserUpdate,
     UserResponse,
-    UserPhotoUploadResponse,
     InmateCreateWithPhotoResponse,
 )
 from app.schemas.facility import FacilityCreate, FacilityUpdate, FacilityResponse

@@ -6,7 +6,8 @@ from sqlalchemy.orm import selectinload
 
 from app.core.enums import UserRole
 from app.core.security import get_password_hash
-from app.core.exceptions import NotFoundError, ConflictError
+from app.core.exceptions import NotFoundError, ConflictError, ValidationError
+from app.models.facility import Facility
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate
 from app.services.wallet_service import WalletService
@@ -57,6 +58,12 @@ class UserService:
             existing_iin = await self.get_by_iin(data.iin)
             if existing_iin:
                 raise ConflictError("User with this IIN already exists")
+        if data.facility_id is not None:
+            facility_result = await self.db.execute(
+                select(Facility.id).where(Facility.id == data.facility_id)
+            )
+            if facility_result.scalar_one_or_none() is None:
+                raise ValidationError("Facility not found")
         user = User(
             email=data.email,
             hashed_password=get_password_hash(data.password),
@@ -86,6 +93,11 @@ class UserService:
         if data.role is not None:
             user.role = data.role
         if data.facility_id is not None:
+            facility_result = await self.db.execute(
+                select(Facility.id).where(Facility.id == data.facility_id)
+            )
+            if facility_result.scalar_one_or_none() is None:
+                raise ValidationError("Facility not found")
             user.facility_id = data.facility_id
         if data.iin is not None:
             new_iin = data.iin.strip() if data.iin else None

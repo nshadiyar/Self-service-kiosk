@@ -7,7 +7,6 @@ from app.dependencies import get_db
 from app.schemas.user import (
     InmateCreateWithPhotoResponse,
     UserCreate,
-    UserPhotoUploadResponse,
     UserUpdate,
     UserResponse,
 )
@@ -66,20 +65,23 @@ async def _store_and_enroll_inmate_photo(*, db, user, file: UploadFile) -> tuple
         content_type=file.content_type,
         filename=file.filename,
     )
-
-    svc = UserService(db)
-    updated = await svc.update_photo(
-        user.id,
-        photo_url=upload_result["url"],
-        photo_object_key=upload_result["object_key"],
-    )
-    face_service = FaceBiometricService(db)
-    biometric = await face_service.enroll_user_photo(
-        user=updated,
-        photo_object_key=upload_result["object_key"],
-        file_bytes=file_bytes,
-    )
-    return updated, biometric
+    try:
+        svc = UserService(db)
+        updated = await svc.update_photo(
+            user.id,
+            photo_url=upload_result["url"],
+            photo_object_key=upload_result["object_key"],
+        )
+        face_service = FaceBiometricService(db)
+        biometric = await face_service.enroll_user_photo(
+            user=updated,
+            photo_object_key=upload_result["object_key"],
+            file_bytes=file_bytes,
+        )
+        return updated, biometric
+    except Exception:
+        storage.delete_object(upload_result["object_key"])
+        raise
 
 
 @router.post("/inmates/with-photo", response_model=InmateCreateWithPhotoResponse)
@@ -112,76 +114,12 @@ async def create_inmate_with_photo(
     created = await svc.create(payload)
     user = await svc.get_by_id(created.id)
     updated, biometric = await _store_and_enroll_inmate_photo(db=db, user=user, file=file)
+    response_user = await svc.get_by_id(updated.id)
 
-    response = _to_user_response(updated).model_dump()
+    response = _to_user_response(response_user).model_dump()
     response["biometric_enrolled"] = True
     response["biometric_provider"] = biometric.provider
     return InmateCreateWithPhotoResponse(**response)
-
-
-@router.post("/{user_id}/photo", response_model=UserPhotoUploadResponse)
-async def upload_inmate_photo(
-    user_id: UUID,
-    file: UploadFile = File(...),
-    db=Depends(get_db),
-    current_user=Depends(require_admin),
-):
-    if not file.filename:
-        raise ValidationError("Photo filename is required")
-    if file.content_type and not file.content_type.startswith("image/"):
-        raise ValidationError("Only image uploads are supported")
-
-    svc = UserService(db)
-    user = await svc.get_by_id(user_id)
-
-    if user.role != UserRole.INMATE:
-        raise ValidationError("Photo upload is allowed only for inmates")
-
-    if current_user.role.value == "PRISON_ADMIN" and current_user.facility_id != user.facility_id:
-        raise AuthorizationError("Access denied")
-    updated, biometric = await _store_and_enroll_inmate_photo(db=db, user=user, file=file)
-
-    return UserPhotoUploadResponse(
-        user_id=updated.id,
-        photo_url=updated.photo_url,
-        photo_object_key=updated.photo_object_key,
-        biometric_enrolled=True,
-        biometric_provider=biometric.provider,
-    )
-
-
-@router.post("/{user_id}/photo/re-enroll", response_model=UserPhotoUploadResponse)
-async def re_enroll_inmate_photo(
-    user_id: UUID,
-    db=Depends(get_db),
-    current_user=Depends(require_admin),
-):
-    svc = UserService(db)
-    user = await svc.get_by_id(user_id)
-
-    if user.role != UserRole.INMATE:
-        raise ValidationError("Face biometrics can be enrolled only for inmates")
-    if not user.photo_object_key or not user.photo_url:
-        raise ValidationError("User does not have an uploaded photo")
-    if current_user.role.value == "PRISON_ADMIN" and current_user.facility_id != user.facility_id:
-        raise AuthorizationError("Access denied")
-
-    storage = MinioStorageService()
-    file_bytes = storage.download_object(user.photo_object_key)
-    face_service = FaceBiometricService(db)
-    biometric = await face_service.enroll_user_photo(
-        user=user,
-        photo_object_key=user.photo_object_key,
-        file_bytes=file_bytes,
-    )
-
-    return UserPhotoUploadResponse(
-        user_id=user.id,
-        photo_url=user.photo_url,
-        photo_object_key=user.photo_object_key,
-        biometric_enrolled=True,
-        biometric_provider=biometric.provider,
-    )
 
 
 @router.get("/{user_id}", response_model=UserResponse)
@@ -195,6 +133,8 @@ async def get_user(user_id: UUID, db=Depends(get_db), current_user=Depends(requi
 
 @router.post("", response_model=UserResponse)
 async def create_user(data: UserCreate, db=Depends(get_db), current_user=Depends(require_super_admin)):
+    if data.role == UserRole.INMATE:
+        raise ValidationError("Use /api/v1/users/inmates/with-photo to create inmates")
     svc = UserService(db)
     created = await svc.create(data)
     user = await svc.get_by_id(created.id)
