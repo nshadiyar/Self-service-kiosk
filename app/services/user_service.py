@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.enums import UserRole
+from app.core.enums import SecurityRegime, UserRole
 from app.core.security import get_password_hash
 from app.core.exceptions import NotFoundError, ConflictError, ValidationError
 from app.models.facility import Facility
@@ -19,7 +19,7 @@ class UserService:
 
     async def get_by_id(self, user_id: UUID) -> User:
         result = await self.db.execute(
-            select(User).options(selectinload(User.facility)).where(User.id == user_id)
+            select(User).options(selectinload(User.facility), selectinload(User.wallet)).where(User.id == user_id)
         )
         user = result.scalar_one_or_none()
         if not user:
@@ -41,7 +41,7 @@ class UserService:
         skip: int = 0,
         limit: int = 20,
     ):
-        q = select(User).options(selectinload(User.facility)).where(User.is_active == True)
+        q = select(User).options(selectinload(User.facility), selectinload(User.wallet)).where(User.is_active == True)
         if facility_id is not None:
             q = q.where(User.facility_id == facility_id)
         if role is not None:
@@ -70,6 +70,7 @@ class UserService:
             full_name=data.full_name,
             role=data.role,
             facility_id=data.facility_id,
+            security_regime=data.security_regime.value if data.role == UserRole.INMATE else SecurityRegime.GENERAL.value,
             iin=data.iin,
             photo_url=data.photo_url,
             photo_object_key=data.photo_object_key,
@@ -81,7 +82,7 @@ class UserService:
 
         if data.role == UserRole.INMATE:
             wallet_svc = WalletService(self.db)
-            await wallet_svc.create_for_user(user.id)
+            await wallet_svc.create_for_user(user.id, user.security_regime)
 
         await self.db.refresh(user)
         return user
@@ -99,6 +100,8 @@ class UserService:
             if facility_result.scalar_one_or_none() is None:
                 raise ValidationError("Facility not found")
             user.facility_id = data.facility_id
+        if hasattr(data, "security_regime") and data.security_regime is not None:
+            user.security_regime = data.security_regime.value
         if data.iin is not None:
             new_iin = data.iin.strip() if data.iin else None
             if new_iin:

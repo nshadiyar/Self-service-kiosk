@@ -1,11 +1,13 @@
+from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 
-from app.core.enums import UserRole
+from app.core.enums import SecurityRegime, UserRole
 from app.dependencies import get_db
 from app.schemas.user import (
     InmateCreateWithPhotoResponse,
+    InmateSettingsUpdate,
     UserCreate,
     UserUpdate,
     UserResponse,
@@ -14,6 +16,7 @@ from app.core.exceptions import AuthorizationError, ValidationError
 from app.services.face_biometric_service import FaceBiometricService
 from app.services.storage_service import MinioStorageService
 from app.services.user_service import UserService
+from app.services.wallet_service import WalletService
 from app.core.security import require_admin, require_super_admin
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -23,6 +26,7 @@ def _to_user_response(user) -> UserResponse:
     facility_name = user.facility.name if user.facility else None
     payload = UserResponse.model_validate(user).model_dump()
     payload["facility_name"] = facility_name
+    payload["monthly_limit"] = user.wallet.monthly_limit if getattr(user, "wallet", None) else None
     return UserResponse(**payload)
 
 
@@ -90,9 +94,11 @@ async def create_inmate_with_photo(
     password: str = Form(...),
     full_name: str = Form(...),
     facility_id: UUID | None = Form(None),
+    security_regime: SecurityRegime = Form(SecurityRegime.GENERAL),
     iin: str | None = Form(None),
     transfer_date: str | None = Form(None),
     release_date: str | None = Form(None),
+    monthly_limit: Decimal | None = Form(None, ge=0),
     file: UploadFile = File(...),
     db=Depends(get_db),
     current_user=Depends(require_super_admin),
@@ -104,6 +110,7 @@ async def create_inmate_with_photo(
             "full_name": full_name,
             "role": UserRole.INMATE,
             "facility_id": facility_id,
+            "security_regime": security_regime,
             "iin": iin,
             "transfer_date": transfer_date,
             "release_date": release_date,
@@ -112,6 +119,9 @@ async def create_inmate_with_photo(
 
     svc = UserService(db)
     created = await svc.create(payload)
+    if monthly_limit is not None:
+        wallet_svc = WalletService(db)
+        await wallet_svc.update_monthly_limit(created.id, monthly_limit)
     user = await svc.get_by_id(created.id)
     updated, biometric = await _store_and_enroll_inmate_photo(db=db, user=user, file=file)
     response_user = await svc.get_by_id(updated.id)
@@ -152,3 +162,31 @@ async def update_user(user_id: UUID, data: UserUpdate, db=Depends(get_db), curre
     updated = await svc.update(user_id, data)
     user = await svc.get_by_id(updated.id)
     return _to_user_response(user)
+
+
+@router.patch("/{user_id}/inmate-settings", response_model=UserResponse)
+async def update_inmate_settings(
+    user_id: UUID,
+    data: InmateSettingsUpdate,
+    db=Depends(get_db),
+    current_user=Depends(require_super_admin),
+):
+    svc = UserService(db)
+    user = await svc.get_by_id(user_id)
+    if user.role != UserRole.INMATE:
+        raise ValidationError("User is not an inmate")
+
+    if "security_regime" in data.model_fields_set and data.security_regime is not None:
+        user.security_regime = data.security_regime.value
+
+    if "monthly_limit" in data.model_fields_set:
+        wallet_svc = WalletService(db)
+        await wallet_svc.update_monthly_limit(user.id, data.monthly_limit)
+    elif "security_regime" in data.model_fields_set and data.security_regime is not None:
+        wallet_svc = WalletService(db)
+        regime_limit = await wallet_svc.get_monthly_limit_for_regime(data.security_regime)
+        await wallet_svc.update_monthly_limit(user.id, regime_limit)
+
+    await db.flush()
+    refreshed = await svc.get_by_id(user.id)
+    return _to_user_response(refreshed)

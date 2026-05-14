@@ -6,7 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.enums import OrderStatus
-from app.core.exceptions import NotFoundError, ValidationError, InsufficientFundsError
+from app.core.exceptions import (
+    InsufficientFundsError,
+    NotFoundError,
+    SpendingLimitExceededError,
+    ValidationError,
+)
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.product import Product
@@ -81,6 +86,9 @@ class OrderService:
             raise NotFoundError("Wallet not found")
         if (wallet.balance or 0) < total:
             raise InsufficientFundsError("Insufficient wallet balance")
+        projected_monthly_spent = (wallet.monthly_spent or 0) + total
+        if wallet.monthly_limit is not None and projected_monthly_spent > wallet.monthly_limit:
+            raise SpendingLimitExceededError("Monthly spending limit exceeded")
 
         order = Order(user_id=user.id, facility_id=facility_id, total_amount=total, status=OrderStatus.PENDING)
         self.db.add(order)

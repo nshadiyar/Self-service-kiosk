@@ -14,7 +14,6 @@ class Facility(Base):
     name = Column(String(255), nullable=False)
     code = Column(String(50), unique=True, nullable=False)
     address = Column(String(500))
-    security_regime = Column(String(50), default="GENERAL")
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default="now()")
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

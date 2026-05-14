@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.database import Base
-from app.core.enums import UserRole
+from app.core.enums import SecurityRegime, UserRole
 
 
 class User(Base):
@@ -18,6 +18,11 @@ class User(Base):
     full_name = Column(String(255), nullable=False)
     role = Column(Enum(UserRole), nullable=False)
     facility_id = Column(UUID(as_uuid=True), ForeignKey("facilities.id"), nullable=True)
+    security_regime = Column(
+        String(50),
+        default=SecurityRegime.GENERAL.value,
+        nullable=False,
+    )
     iin = Column(String(12), unique=True, nullable=True, index=True)
     photo_url = Column(String(500), nullable=True)
     photo_object_key = Column(String(500), nullable=True)

@@ -22,7 +22,6 @@ async def seed():
             name="Prison Facility #1",
             code="FAC-001",
             address="Kazakhstan",
-            security_regime=SecurityRegime.GENERAL.value,
         )
         db.add(facility)
         await db.flush()
@@ -62,6 +61,7 @@ async def seed():
                 full_name=name,
                 role=UserRole.INMATE,
                 facility_id=facility.id,
+                security_regime=SecurityRegime.GENERAL.value,
             )
             db.add(user)
             await db.flush()

@@ -1,10 +1,11 @@
 import re
 from datetime import date, datetime
+from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_serializer, field_validator
 
-from app.core.enums import UserRole
+from app.core.enums import SecurityRegime, UserRole
 
 IIN_PATTERN = re.compile(r"^\d{12}$")
 
@@ -22,6 +23,7 @@ class UserBase(BaseModel):
     full_name: str
     role: UserRole
     facility_id: UUID | None = None
+    security_regime: SecurityRegime = SecurityRegime.GENERAL
     iin: str | None = None
     photo_url: str | None = None
     photo_object_key: str | None = None
@@ -62,17 +64,28 @@ class UserResponse(BaseModel):
     role: UserRole
     facility_id: UUID | None
     facility_name: str | None = None
+    security_regime: SecurityRegime
     iin: str | None
     photo_url: str | None
     photo_object_key: str | None
     transfer_date: date | None
     release_date: date | None
+    monthly_limit: Decimal | None = None
     is_active: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}
 
+    @field_serializer("monthly_limit")
+    def serialize_monthly_limit(self, v: Decimal | None) -> float | None:
+        return float(v) if v is not None else None
+
 
 class InmateCreateWithPhotoResponse(UserResponse):
     biometric_enrolled: bool
     biometric_provider: str
+
+
+class InmateSettingsUpdate(BaseModel):
+    security_regime: SecurityRegime | None = None
+    monthly_limit: Decimal | None = Field(default=None, ge=0)

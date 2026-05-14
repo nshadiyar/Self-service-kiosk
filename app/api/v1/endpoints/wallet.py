@@ -4,9 +4,15 @@ from fastapi import APIRouter, Depends, Query
 
 from app.dependencies import get_db
 from app.services.user_service import UserService
-from app.schemas.wallet import InmateWalletResponse, WalletResponse, TopUpRequest
+from app.schemas.wallet import (
+    InmateWalletResponse,
+    SecurityRegimeLimitResponse,
+    SecurityRegimeLimitUpdate,
+    TopUpRequest,
+    WalletResponse,
+)
 from app.services.wallet_service import WalletService
-from app.core.security import require_inmate, require_admin
+from app.core.security import require_admin, require_inmate, require_super_admin
 
 router = APIRouter(prefix="/wallet", tags=["wallet"])
 
@@ -54,4 +60,26 @@ async def list_inmate_wallets(
         facility_id=facility_filter,
         skip=skip,
         limit=limit,
+    )
+
+
+@router.get("/monthly-limits/by-security-regime", response_model=list[SecurityRegimeLimitResponse])
+async def list_security_regime_limits(
+    db=Depends(get_db),
+    current_user=Depends(require_super_admin),
+):
+    svc = WalletService(db)
+    return await svc.list_security_regime_limits()
+
+
+@router.patch("/monthly-limits/by-security-regime", response_model=SecurityRegimeLimitResponse)
+async def update_security_regime_limit(
+    data: SecurityRegimeLimitUpdate,
+    db=Depends(get_db),
+    current_user=Depends(require_super_admin),
+):
+    svc = WalletService(db)
+    return await svc.upsert_security_regime_limit(
+        security_regime=data.security_regime,
+        monthly_limit=data.monthly_limit,
     )

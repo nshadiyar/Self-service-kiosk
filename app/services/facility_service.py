@@ -33,7 +33,6 @@ class FacilityService:
             name=data.name,
             code=data.code,
             address=data.address,
-            security_regime=data.security_regime.value,
         )
         self.db.add(facility)
         await self.db.flush()
@@ -48,8 +47,6 @@ class FacilityService:
             facility.code = data.code
         if data.address is not None:
             facility.address = data.address
-        if data.security_regime is not None:
-            facility.security_regime = data.security_regime.value
         if data.is_active is not None:
             facility.is_active = data.is_active
         await self.db.flush()

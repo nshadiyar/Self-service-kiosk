@@ -4,6 +4,7 @@ from app.schemas.user import (
     UserUpdate,
     UserResponse,
     InmateCreateWithPhotoResponse,
+    InmateSettingsUpdate,
 )
 from app.schemas.facility import FacilityCreate, FacilityUpdate, FacilityResponse
 from app.schemas.catalog import CategoryResponse, ProductResponse

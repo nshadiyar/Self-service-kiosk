@@ -3,14 +3,10 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from app.core.enums import SecurityRegime
-
-
 class FacilityBase(BaseModel):
     name: str
     code: str
     address: str | None = None
-    security_regime: SecurityRegime = SecurityRegime.GENERAL
 
 
 class FacilityCreate(FacilityBase):
@@ -21,7 +17,6 @@ class FacilityUpdate(BaseModel):
     name: str | None = None
     code: str | None = None
     address: str | None = None
-    security_regime: SecurityRegime | None = None
     is_active: bool | None = None
 
 
@@ -30,7 +25,6 @@ class FacilityResponse(BaseModel):
     name: str
     code: str
     address: str | None
-    security_regime: str
     is_active: bool
     created_at: datetime
 

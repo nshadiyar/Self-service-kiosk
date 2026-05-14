@@ -9,6 +9,7 @@ from app.models.order_item import OrderItem
 from app.models.wallet_transaction import WalletTransaction
 from app.models.face_biometric import FaceBiometric
 from app.models.face_auth_attempt import FaceAuthAttempt
+from app.models.security_regime_limit import SecurityRegimeLimit
 
 __all__ = [
     "User",
@@ -22,4 +23,5 @@ __all__ = [
     "WalletTransaction",
     "FaceBiometric",
     "FaceAuthAttempt",
+    "SecurityRegimeLimit",
 ]

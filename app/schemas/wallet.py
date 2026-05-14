@@ -2,7 +2,9 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, field_serializer
+from pydantic import BaseModel, Field, field_serializer
+
+from app.core.enums import SecurityRegime
 
 
 class WalletResponse(BaseModel):
@@ -38,3 +40,17 @@ class InmateWalletResponse(BaseModel):
     @field_serializer("balance", "monthly_spent", "monthly_limit")
     def serialize_decimal(self, v: Decimal | None) -> float | None:
         return float(v) if v is not None else None
+
+
+class SecurityRegimeLimitResponse(BaseModel):
+    security_regime: SecurityRegime
+    monthly_limit: Decimal
+
+    @field_serializer("monthly_limit")
+    def serialize_monthly_limit(self, v: Decimal) -> float:
+        return float(v)
+
+
+class SecurityRegimeLimitUpdate(BaseModel):
+    security_regime: SecurityRegime
+    monthly_limit: Decimal = Field(ge=0)
