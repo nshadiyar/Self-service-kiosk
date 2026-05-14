@@ -63,6 +63,7 @@ class FaceTuningConfigResponse(BaseModel):
     provider: str
     match_threshold: float
     match_min_gap: float
+    match_gap_bypass_score: float
     min_blur_variance: float
     hard_min_blur_variance: float
     min_brightness: float

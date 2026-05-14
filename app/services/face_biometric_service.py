@@ -1,4 +1,5 @@
 import json
+import logging
 from dataclasses import dataclass
 from io import BytesIO
 from uuid import UUID
@@ -18,6 +19,8 @@ from app.models.face_auth_attempt import FaceAuthAttempt
 from app.models.face_biometric import FaceBiometric
 from app.models.user import User
 from app.schemas.auth import FaceClientMetadata
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -202,9 +205,30 @@ class FaceBiometricService:
         if best_biometric is None or best_score < effective_threshold:
             would_authenticate = False
             failure_reason = "Face match threshold not reached"
-        elif score_gap is not None and score_gap < settings.face_match_min_gap:
+        elif (
+            score_gap is not None
+            and best_score < settings.face_match_gap_bypass_score
+            and score_gap < settings.face_match_min_gap
+        ):
             would_authenticate = False
             failure_reason = "Face match is ambiguous"
+
+        logger.info(
+            "MATCH DEBUG: score=%.4f, threshold=%.4f, effective_threshold=%.4f, "
+            "second_best=%s, gap=%s, min_gap=%.4f, gap_bypass_score=%.4f, "
+            "quality=%.4f, liveness=%s, decision=%s, reason=%s",
+            best_score,
+            settings.face_match_threshold,
+            effective_threshold,
+            f"{second_best_score:.4f}" if second_best_score is not None else "None",
+            f"{score_gap:.4f}" if score_gap is not None else "None",
+            settings.face_match_min_gap,
+            settings.face_match_gap_bypass_score,
+            sample.quality_score,
+            f"{sample.liveness_score:.4f}" if sample.liveness_score is not None else "None",
+            "allow" if would_authenticate else "deny",
+            failure_reason or "matched",
+        )
 
         return FaceMatchEvaluation(
             matched_user_id=best_biometric.user_id if would_authenticate and best_biometric else None,

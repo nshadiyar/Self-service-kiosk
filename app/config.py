@@ -93,7 +93,8 @@ class Settings(BaseSettings):
     face_login_hard_min_brightness: float = 18.0
     face_login_hard_max_brightness: float = 245.0
     face_login_min_quality_score: float = 0.18
-    face_match_min_gap: float = 0.08
+    face_match_min_gap: float = 0.04
+    face_match_gap_bypass_score: float = 0.82
     face_match_max_quality_penalty: float = 0.10
     face_match_max_liveness_penalty: float = 0.08
     face_login_secondary_face_max_ratio: float = 0.75

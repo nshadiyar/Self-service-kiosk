@@ -31,6 +31,7 @@ async def get_face_config(current_user=Depends(require_admin)):
         provider=settings.face_provider_name,
         match_threshold=settings.face_match_threshold,
         match_min_gap=settings.face_match_min_gap,
+        match_gap_bypass_score=settings.face_match_gap_bypass_score,
         min_blur_variance=settings.face_login_min_blur_variance,
         hard_min_blur_variance=settings.face_login_hard_min_blur_variance,
         min_brightness=settings.face_login_min_brightness,
