@@ -23,7 +23,7 @@ class UserService:
         )
         user = result.scalar_one_or_none()
         if not user:
-            raise NotFoundError("User not found")
+            raise NotFoundError("Пользователь не найден")
         return user
 
     async def get_by_email(self, email: str) -> User | None:
@@ -53,17 +53,17 @@ class UserService:
     async def create(self, data: UserCreate) -> User:
         existing = await self.get_by_email(data.email)
         if existing:
-            raise ConflictError("User with this email already exists")
+            raise ConflictError("Пользователь с такой электронной почтой уже существует")
         if data.iin:
             existing_iin = await self.get_by_iin(data.iin)
             if existing_iin:
-                raise ConflictError("User with this IIN already exists")
+                raise ConflictError("Пользователь с таким ИИН уже существует")
         if data.facility_id is not None:
             facility_result = await self.db.execute(
                 select(Facility.id).where(Facility.id == data.facility_id)
             )
             if facility_result.scalar_one_or_none() is None:
-                raise ValidationError("Facility not found")
+                raise ValidationError("Учреждение не найдено")
         user = User(
             email=data.email,
             hashed_password=get_password_hash(data.password),
@@ -98,7 +98,7 @@ class UserService:
                 select(Facility.id).where(Facility.id == data.facility_id)
             )
             if facility_result.scalar_one_or_none() is None:
-                raise ValidationError("Facility not found")
+                raise ValidationError("Учреждение не найдено")
             user.facility_id = data.facility_id
         if hasattr(data, "security_regime") and data.security_regime is not None:
             user.security_regime = data.security_regime.value
@@ -107,7 +107,7 @@ class UserService:
             if new_iin:
                 existing_iin = await self.get_by_iin(new_iin)
                 if existing_iin and existing_iin.id != user_id:
-                    raise ConflictError("User with this IIN already exists")
+                    raise ConflictError("Пользователь с таким ИИН уже существует")
             user.iin = new_iin
         if data.photo_url is not None:
             user.photo_url = data.photo_url

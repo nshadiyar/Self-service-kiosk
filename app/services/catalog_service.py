@@ -23,7 +23,7 @@ class CatalogService:
         result = await self.db.execute(select(Category).where(Category.id == category_id))
         c = result.scalar_one_or_none()
         if not c:
-            raise NotFoundError("Category not found")
+            raise NotFoundError("Категория не найдена")
         return c
 
     async def list_products(
@@ -31,6 +31,7 @@ class CatalogService:
         category_id: UUID | None = None,
         facility_id: UUID | None = None,
         vendor_id: UUID | None = None,
+        name: str | None = None,
         sort: str = "asc",
         skip: int = 0,
         limit: int = 50,
@@ -42,6 +43,8 @@ class CatalogService:
             q = q.where((Product.facility_id == facility_id) | (Product.facility_id.is_(None)))
         if vendor_id is not None:
             q = q.where(Product.vendor_id == vendor_id)
+        if name is not None and name.strip():
+            q = q.where(Product.name.ilike(f"%{name.strip()}%"))
         q = q.order_by(Product.price.asc() if sort == "asc" else Product.price.desc())
         q = q.offset(skip).limit(limit)
         result = await self.db.execute(q)
@@ -62,12 +65,12 @@ class CatalogService:
         )
         v = result.scalar_one_or_none()
         if not v:
-            raise NotFoundError("Vendor not found")
+            raise NotFoundError("Поставщик не найден")
         return v
 
     async def get_product(self, product_id: UUID) -> Product:
         result = await self.db.execute(select(Product).where(Product.id == product_id))
         p = result.scalar_one_or_none()
         if not p:
-            raise NotFoundError("Product not found")
+            raise NotFoundError("Товар не найден")
         return p

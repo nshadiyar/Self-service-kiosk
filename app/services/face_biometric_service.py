@@ -66,11 +66,11 @@ class FaceBiometricService:
             app.prepare(ctx_id=0, det_size=(640, 640))
             cls._analysis_app = app
         except Exception as exc:
-            raise ValidationError(f"Face model initialization failed: {exc}") from exc
+            raise ValidationError(f"Не удалось инициализировать модель распознавания лица: {exc}") from exc
 
     async def enroll_user_photo(self, *, user: User, photo_object_key: str, file_bytes: bytes) -> FaceBiometric:
         if user.role != UserRole.INMATE:
-            raise ValidationError("Face biometrics can be enrolled only for inmates")
+            raise ValidationError("Биометрию лица можно регистрировать только для заключенных")
 
         sample = self._extract_face_sample(file_bytes, enforce_liveness=False)
 
@@ -132,7 +132,7 @@ class FaceBiometricService:
                 eye_count=sample.eye_count,
                 client_metadata=client_metadata,
                 success=False,
-                failure_reason="No enrolled face biometrics found",
+                failure_reason="Биометрические данные не зарегистрированы",
             )
             raise AuthenticationError("Пользователь не найден")
 
@@ -204,14 +204,14 @@ class FaceBiometricService:
         would_authenticate = True
         if best_biometric is None or best_score < effective_threshold:
             would_authenticate = False
-            failure_reason = "Face match threshold not reached"
+            failure_reason = "Не достигнут порог совпадения лица"
         elif (
             score_gap is not None
             and best_score < settings.face_match_gap_bypass_score
             and score_gap < settings.face_match_min_gap
         ):
             would_authenticate = False
-            failure_reason = "Face match is ambiguous"
+            failure_reason = "Совпадение лица неоднозначно"
 
         logger.info(
             "MATCH DEBUG: score=%.4f, threshold=%.4f, effective_threshold=%.4f, "
@@ -289,7 +289,7 @@ class FaceBiometricService:
 
     def _extract_face_sample(self, file_bytes: bytes, *, enforce_liveness: bool) -> FaceFeatureSample:
         if self._analysis_app is None:
-            raise ValidationError("Face model is not initialized")
+            raise ValidationError("Модель распознавания лица не инициализирована")
 
         image = self._load_image(file_bytes)
         rgb = np.asarray(image)
@@ -299,7 +299,7 @@ class FaceBiometricService:
         faces = self._analysis_app.get(bgr)
         detected_face_count = len(faces)
         if not faces:
-            raise ValidationError("No face detected in the image")
+            raise ValidationError("На изображении не найдено лицо")
 
         face = self._select_primary_face(faces)
         bbox = getattr(face, "bbox", None)
@@ -307,7 +307,7 @@ class FaceBiometricService:
         kps = getattr(face, "kps", None)
 
         if bbox is None or embedding is None:
-            raise ValidationError("Face model did not return a usable embedding")
+            raise ValidationError("Модель лица не вернула пригодный вектор признаков")
 
         x1, y1, x2, y2 = [int(round(v)) for v in bbox]
         x1 = max(0, x1)
@@ -320,7 +320,7 @@ class FaceBiometricService:
         image_area = float(gray.shape[0] * gray.shape[1])
         face_area_ratio = (width * height) / image_area
         if face_area_ratio < settings.face_login_min_face_area_ratio:
-            raise ValidationError("Face is too small in the image")
+            raise ValidationError("Лицо слишком маленькое на изображении")
 
         face_roi = gray[y1:y2, x1:x2]
         blur_variance = float(cv2.Laplacian(face_roi, cv2.CV_64F).var())
@@ -341,23 +341,23 @@ class FaceBiometricService:
                 eye_count=eye_count,
             )
             if blur_variance < settings.face_login_hard_min_blur_variance:
-                raise ValidationError("Image is too blurry for face authentication")
+                raise ValidationError("Изображение слишком размыто для аутентификации по лицу")
             if (
                 brightness < settings.face_login_hard_min_brightness
                 or brightness > settings.face_login_hard_max_brightness
             ):
-                raise ValidationError("Image lighting is unsuitable for face authentication")
+                raise ValidationError("Освещение изображения не подходит для аутентификации по лицу")
             if eye_count < settings.face_login_min_eye_count:
-                raise ValidationError("Anti-spoof check failed: eyes not detected clearly")
+                raise ValidationError("Не пройдена антиспуф-проверка: глаза определены недостаточно четко")
             if quality_score < settings.face_login_min_quality_score:
-                raise ValidationError("Image quality is too low for face authentication")
+                raise ValidationError("Качество изображения слишком низкое для аутентификации по лицу")
         else:
             liveness_score = None
 
         descriptor = np.asarray(embedding, dtype=np.float32)
         norm = np.linalg.norm(descriptor)
         if norm == 0:
-            raise ValidationError("Unable to extract stable face embedding")
+            raise ValidationError("Не удалось извлечь стабильный вектор признаков лица")
         descriptor = descriptor / norm
 
         return FaceFeatureSample(
@@ -376,7 +376,7 @@ class FaceBiometricService:
             image = Image.open(BytesIO(file_bytes))
             return ImageOps.exif_transpose(image).convert("RGB")
         except Exception as exc:
-            raise ValidationError(f"Invalid image file: {exc}") from exc
+            raise ValidationError(f"Некорректный файл изображения: {exc}") from exc
 
     def _cosine_similarity(self, a: np.ndarray, b: np.ndarray) -> float:
         if a.shape != b.shape:
@@ -394,14 +394,14 @@ class FaceBiometricService:
             faces_with_area.append((face, area))
 
         if not faces_with_area:
-            raise ValidationError("No face detected in the image")
+            raise ValidationError("На изображении не найдено лицо")
 
         faces_with_area.sort(key=lambda item: item[1], reverse=True)
         primary_face, primary_area = faces_with_area[0]
         if len(faces_with_area) > 1:
             secondary_area = faces_with_area[1][1]
             if (secondary_area / primary_area) >= settings.face_login_secondary_face_max_ratio:
-                raise ValidationError("Exactly one face must be visible in the image")
+                raise ValidationError("На изображении должно быть видно ровно одно лицо")
         return primary_face
 
     def _effective_match_threshold(self, *, quality_score: float, liveness_score: float | None) -> float:

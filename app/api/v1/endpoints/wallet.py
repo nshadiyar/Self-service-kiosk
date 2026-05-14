@@ -38,7 +38,8 @@ async def top_up(
         user_svc = UserService(db)
         user = await user_svc.get_by_id(data.user_id)
         if user.facility_id != current_user.facility_id:
-            raise AuthorizationError("Cannot top up wallet of user from another facility")
+            raise AuthorizationError("Нельзя пополнять кошелек пользователя из другого учреждения")
+
     svc = WalletService(db)
     wallet = await svc.top_up(data.user_id, data.amount)
     return WalletResponse.model_validate(wallet)

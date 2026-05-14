@@ -42,7 +42,7 @@ async def response_wrapper_middleware(request: Request, call_next):
         logger.exception("Unhandled error in middleware for %s", request.url.path)
         return JSONResponse(
             status_code=500,
-            content={"success": False, "data": None, "message": "Internal server error"},
+            content={"success": False, "data": None, "message": "Внутренняя ошибка сервера"},
         )
 
     if not (
@@ -82,7 +82,7 @@ async def response_wrapper_middleware(request: Request, call_next):
 
     # Wrap only if not already wrapped
     if not isinstance(data, dict) or "success" not in data:
-        data = {"success": True, "data": data, "message": "Success"}
+        data = {"success": True, "data": data, "message": "Успешно"}
 
     return JSONResponse(
         content=data,

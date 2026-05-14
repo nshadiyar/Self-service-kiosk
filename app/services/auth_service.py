@@ -33,7 +33,7 @@ class AuthService:
     async def login(self, login: str, password: str) -> tuple[str, str, UserRole]:
         user = await self._find_user_by_login(login)
         if not user or not verify_password(password, user.hashed_password):
-            raise AuthenticationError("Invalid login or password")
+            raise AuthenticationError("Неверный логин или пароль")
         access = create_access_token(user.id)
         refresh = create_refresh_token(user.id)
         return access, refresh, user.role
@@ -41,18 +41,18 @@ class AuthService:
     async def refresh_tokens(self, refresh_token: str) -> tuple[str, str, UserRole]:
         payload = verify_token(refresh_token)
         if payload.get("type") != "refresh":
-            raise AuthenticationError("Invalid refresh token")
+            raise AuthenticationError("Недействительный refresh-токен")
         user_id = payload.get("sub")
         if not user_id:
-            raise AuthenticationError("Invalid token")
+            raise AuthenticationError("Недействительный токен")
         try:
             user_uuid = UUID(user_id)
         except (ValueError, TypeError):
-            raise AuthenticationError("Invalid token")
+            raise AuthenticationError("Недействительный токен")
         result = await self.db.execute(select(User).where(User.id == user_uuid, User.is_active == True))
         user = result.scalar_one_or_none()
         if not user:
-            raise AuthenticationError("User not found")
+            raise AuthenticationError("Пользователь не найден")
         return create_access_token(user.id), create_refresh_token(user.id), user.role
 
     async def face_login(

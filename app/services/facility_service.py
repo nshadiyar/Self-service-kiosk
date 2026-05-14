@@ -16,7 +16,7 @@ class FacilityService:
         result = await self.db.execute(select(Facility).where(Facility.id == facility_id))
         f = result.scalar_one_or_none()
         if not f:
-            raise NotFoundError("Facility not found")
+            raise NotFoundError("Учреждение не найдено")
         return f
 
     async def list_facilities(self, skip: int = 0, limit: int = 20):
@@ -28,7 +28,7 @@ class FacilityService:
     async def create(self, data: FacilityCreate) -> Facility:
         result = await self.db.execute(select(Facility).where(Facility.code == data.code))
         if result.scalar_one_or_none():
-            raise ConflictError("Facility with this code already exists")
+            raise ConflictError("Учреждение с таким кодом уже существует")
         facility = Facility(
             name=data.name,
             code=data.code,

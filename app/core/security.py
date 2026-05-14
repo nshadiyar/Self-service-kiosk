@@ -44,7 +44,7 @@ def verify_token(token: str) -> dict[str, Any]:
         payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
         return payload
     except JWTError:
-        raise AuthenticationError("Invalid or expired token")
+        raise AuthenticationError("Недействительный или просроченный токен")
 
 
 async def get_current_user_dep(
@@ -53,31 +53,31 @@ async def get_current_user_dep(
 ) -> User:
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
-        raise AuthenticationError("Missing or invalid authorization header")
+        raise AuthenticationError("Отсутствует или неверный заголовок авторизации")
     token = auth_header.split()[-1]
     payload = verify_token(token)
     if payload.get("type") != "access":
-        raise AuthenticationError("Invalid token type")
+        raise AuthenticationError("Неверный тип токена")
     user_id = payload.get("sub")
     if not user_id:
-        raise AuthenticationError("Invalid token")
+        raise AuthenticationError("Недействительный токен")
     try:
         user_uuid = UUID(user_id)
     except (ValueError, TypeError):
-        raise AuthenticationError("Invalid token")
+        raise AuthenticationError("Недействительный токен")
     result = await db.execute(
         select(User).where(User.id == user_uuid).where(User.is_active == True)
     )
     user = result.scalar_one_or_none()
     if not user:
-        raise AuthenticationError("User not found")
+        raise AuthenticationError("Пользователь не найден")
     return user
 
 
 def require_roles(*roles: UserRole):
     async def _check(current_user: User = Depends(get_current_user_dep)):
         if current_user.role not in roles:
-            raise AuthorizationError("Insufficient permissions")
+            raise AuthorizationError("Недостаточно прав")
         return current_user
     return _check
 

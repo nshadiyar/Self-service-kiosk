@@ -8,40 +8,40 @@ class BromartException(Exception):
 
 
 class AuthenticationError(BromartException):
-    def __init__(self, detail: str = "Authentication failed"):
+    def __init__(self, detail: str = "Ошибка аутентификации"):
         super().__init__(detail, status_code=401)
 
 
 class AuthorizationError(BromartException):
-    def __init__(self, detail: str = "Insufficient permissions"):
+    def __init__(self, detail: str = "Недостаточно прав"):
         super().__init__(detail, status_code=403)
 
 
 class NotFoundError(BromartException):
-    def __init__(self, detail: str = "Resource not found"):
+    def __init__(self, detail: str = "Ресурс не найден"):
         super().__init__(detail, status_code=404)
 
 
 class ValidationError(BromartException):
-    def __init__(self, detail: str = "Validation error"):
+    def __init__(self, detail: str = "Ошибка валидации"):
         super().__init__(detail, status_code=422)
 
 
 class ConflictError(BromartException):
-    def __init__(self, detail: str = "Conflict"):
+    def __init__(self, detail: str = "Конфликт данных"):
         super().__init__(detail, status_code=409)
 
 
 class InsufficientFundsError(BromartException):
-    def __init__(self, detail: str = "Insufficient wallet balance"):
+    def __init__(self, detail: str = "Недостаточно средств на кошельке"):
         super().__init__(detail, status_code=400)
 
 
 class SpendingLimitExceededError(BromartException):
-    def __init__(self, detail: str = "Monthly spending limit exceeded"):
+    def __init__(self, detail: str = "Превышен месячный лимит расходов"):
         super().__init__(detail, status_code=400)
 
 
 class InsufficientStockError(BromartException):
-    def __init__(self, detail: str = "Insufficient product stock"):
+    def __init__(self, detail: str = "Недостаточно товара на складе"):
         super().__init__(detail, status_code=400)

@@ -60,10 +60,10 @@ async def get_order(
     order = await svc.get_by_id(order_id)
     if current_user.role.value == "INMATE" and order.user_id != current_user.id:
         from app.core.exceptions import AuthorizationError
-        raise AuthorizationError("Access denied")
+        raise AuthorizationError("Доступ запрещен")
     if current_user.role.value == "PRISON_ADMIN" and current_user.facility_id != order.facility_id:
         from app.core.exceptions import AuthorizationError
-        raise AuthorizationError("Access denied")
+        raise AuthorizationError("Доступ запрещен")
     return _to_order_response(order)
 
 
@@ -88,7 +88,7 @@ async def approve_order(
     order = await svc.get_by_id(order_id)
     if current_user.role.value == "PRISON_ADMIN" and order.facility_id != current_user.facility_id:
         from app.core.exceptions import AuthorizationError
-        raise AuthorizationError("Access denied")
+        raise AuthorizationError("Доступ запрещен")
     order = await svc.approve(order_id)
     return _to_order_response(order)
 
@@ -104,6 +104,6 @@ async def reject_order(
     order = await svc.get_by_id(order_id)
     if current_user.role.value == "PRISON_ADMIN" and order.facility_id != current_user.facility_id:
         from app.core.exceptions import AuthorizationError
-        raise AuthorizationError("Access denied")
+        raise AuthorizationError("Доступ запрещен")
     order = await svc.reject(order_id, data.reason)
     return _to_order_response(order)

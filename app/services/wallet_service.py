@@ -22,7 +22,7 @@ class WalletService:
         result = await self.db.execute(select(Wallet).where(Wallet.user_id == user_id))
         w = result.scalar_one_or_none()
         if not w:
-            raise NotFoundError("Wallet not found")
+            raise NotFoundError("Кошелек не найден")
         return w
 
     async def get_monthly_limit_for_regime(self, security_regime: SecurityRegime | str) -> Decimal:

@@ -13,11 +13,11 @@ class MinioStorageService:
     def __init__(self):
         endpoint = settings.s3_client_endpoint
         if not endpoint:
-            raise ValidationError("MinIO endpoint is not configured")
+            raise ValidationError("Не настроен адрес MinIO")
         if not settings.s3_access_key or not settings.s3_secret_key:
-            raise ValidationError("MinIO credentials are not configured")
+            raise ValidationError("Не настроены учетные данные MinIO")
         if not settings.minio_bucket_name:
-            raise ValidationError("MinIO bucket name is not configured")
+            raise ValidationError("Не настроено имя хранилища MinIO")
 
         self.endpoint = endpoint
         self.bucket_name = settings.minio_bucket_name
@@ -32,10 +32,10 @@ class MinioStorageService:
         try:
             bucket_exists = self.client.bucket_exists(self.bucket_name)
         except (S3Error, MinioException, Exception) as exc:
-            raise ValidationError(f"MinIO connection failed: {exc}") from exc
+            raise ValidationError(f"Не удалось подключиться к MinIO: {exc}") from exc
 
         if not bucket_exists:
-            raise ValidationError(f"MinIO bucket '{self.bucket_name}' does not exist")
+            raise ValidationError(f"Хранилище MinIO '{self.bucket_name}' не существует")
 
         return {
             "status": "ok",
@@ -53,15 +53,15 @@ class MinioStorageService:
         filename: str | None = None,
     ) -> dict[str, str]:
         if not file_bytes:
-            raise ValidationError("Uploaded file is empty")
+            raise ValidationError("Загруженный файл пустой")
 
         try:
             bucket_exists = self.client.bucket_exists(self.bucket_name)
         except (S3Error, MinioException, Exception) as exc:
-            raise ValidationError(f"MinIO connection failed: {exc}") from exc
+            raise ValidationError(f"Не удалось подключиться к MinIO: {exc}") from exc
 
         if not bucket_exists:
-            raise ValidationError(f"MinIO bucket '{self.bucket_name}' does not exist")
+            raise ValidationError(f"Хранилище MinIO '{self.bucket_name}' не существует")
 
         normalized_content_type = content_type or "application/octet-stream"
         object_key = self._build_object_key(
@@ -80,7 +80,7 @@ class MinioStorageService:
                 content_type=normalized_content_type,
             )
         except (S3Error, MinioException, Exception) as exc:
-            raise ValidationError(f"MinIO upload failed: {exc}") from exc
+            raise ValidationError(f"Ошибка загрузки в MinIO: {exc}") from exc
 
         return {
             "object_key": object_key,
@@ -96,7 +96,7 @@ class MinioStorageService:
                 response.close()
                 response.release_conn()
         except (S3Error, MinioException, Exception) as exc:
-            raise ValidationError(f"MinIO download failed: {exc}") from exc
+            raise ValidationError(f"Ошибка скачивания из MinIO: {exc}") from exc
 
     def delete_object(self, object_key: str) -> None:
         try:
@@ -104,9 +104,9 @@ class MinioStorageService:
         except S3Error as exc:
             if getattr(exc, "code", None) == "NoSuchKey":
                 return
-            raise ValidationError(f"MinIO delete failed: {exc}") from exc
+            raise ValidationError(f"Ошибка удаления из MinIO: {exc}") from exc
         except (MinioException, Exception) as exc:
-            raise ValidationError(f"MinIO delete failed: {exc}") from exc
+            raise ValidationError(f"Ошибка удаления из MinIO: {exc}") from exc
 
     def build_public_url(self, object_key: str) -> str:
         if settings.minio_public_endpoint:

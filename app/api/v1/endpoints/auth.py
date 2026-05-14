@@ -38,10 +38,10 @@ async def face_login(
 ):
     if not file.filename:
         from app.core.exceptions import ValidationError
-        raise ValidationError("Photo filename is required")
+        raise ValidationError("Необходимо указать имя файла фотографии")
     if file.content_type and not file.content_type.startswith("image/"):
         from app.core.exceptions import ValidationError
-        raise ValidationError("Only image uploads are supported")
+        raise ValidationError("Поддерживается загрузка только изображений")
 
     svc = AuthService(db)
     file_bytes = await file.read()

@@ -31,7 +31,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 async def general_exception_handler(request: Request, exc: Exception):
     logger.error("Unexpected error: %s", exc, exc_info=True)
-    message = str(exc) if settings.debug else "Internal server error"
+    message = str(exc) if settings.debug else "Внутренняя ошибка сервера"
     return JSONResponse(
         status_code=500,
         content={"success": False, "data": None, "message": message},

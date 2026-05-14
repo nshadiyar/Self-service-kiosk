@@ -113,7 +113,7 @@ async def deactivate_biometric_record(
     result = await db.execute(select(FaceBiometric).where(FaceBiometric.id == biometric_id))
     biometric = result.scalar_one_or_none()
     if not biometric:
-        raise ValidationError("Biometric record not found")
+        raise ValidationError("Биометрическая запись не найдена")
     biometric.is_active = False
     await db.flush()
     await db.refresh(biometric)
@@ -128,7 +128,7 @@ async def evaluate_face_tuning(
     current_user=Depends(require_admin),
 ):
     if file.content_type and not file.content_type.startswith("image/"):
-        raise ValidationError("Only image uploads are supported")
+        raise ValidationError("Поддерживается загрузка только изображений")
     face_service = FaceBiometricService(db)
     sample = face_service._extract_face_sample(await file.read(), enforce_liveness=True)
 

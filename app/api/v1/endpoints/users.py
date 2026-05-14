@@ -57,9 +57,9 @@ async def minio_health_check(current_user=Depends(require_admin)):
 
 async def _store_and_enroll_inmate_photo(*, db, user, file: UploadFile) -> tuple[object, object]:
     if not file.filename:
-        raise ValidationError("Photo filename is required")
+        raise ValidationError("Необходимо указать имя файла фотографии")
     if file.content_type and not file.content_type.startswith("image/"):
-        raise ValidationError("Only image uploads are supported")
+        raise ValidationError("Поддерживается загрузка только изображений")
 
     file_bytes = await file.read()
     storage = MinioStorageService()
@@ -137,14 +137,14 @@ async def get_user(user_id: UUID, db=Depends(get_db), current_user=Depends(requi
     svc = UserService(db)
     user = await svc.get_by_id(user_id)
     if current_user.role.value == "PRISON_ADMIN" and current_user.facility_id != user.facility_id:
-        raise AuthorizationError("Access denied")
+        raise AuthorizationError("Доступ запрещен")
     return _to_user_response(user)
 
 
 @router.post("", response_model=UserResponse)
 async def create_user(data: UserCreate, db=Depends(get_db), current_user=Depends(require_super_admin)):
     if data.role == UserRole.INMATE:
-        raise ValidationError("Use /api/v1/users/inmates/with-photo to create inmates")
+        raise ValidationError("Для создания заключенных используйте /api/v1/users/inmates/with-photo")
     svc = UserService(db)
     created = await svc.create(data)
     user = await svc.get_by_id(created.id)
@@ -157,7 +157,7 @@ async def update_user(user_id: UUID, data: UserUpdate, db=Depends(get_db), curre
         svc = UserService(db)
         user = await svc.get_by_id(user_id)
         if user.facility_id != current_user.facility_id:
-            raise AuthorizationError("Access denied")
+            raise AuthorizationError("Доступ запрещен")
     svc = UserService(db)
     updated = await svc.update(user_id, data)
     user = await svc.get_by_id(updated.id)
@@ -174,7 +174,7 @@ async def update_inmate_settings(
     svc = UserService(db)
     user = await svc.get_by_id(user_id)
     if user.role != UserRole.INMATE:
-        raise ValidationError("User is not an inmate")
+        raise ValidationError("Пользователь не является заключенным")
 
     if "security_regime" in data.model_fields_set and data.security_regime is not None:
         user.security_regime = data.security_regime.value

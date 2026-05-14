@@ -57,6 +57,7 @@ async def get_vendor(
 async def list_products(
     category_id: UUID | None = Query(None),
     vendor_id: UUID | None = Query(None),
+    name: str | None = Query(None, description="Поиск по наименованию товара"),
     sort: str = Query("asc", pattern="^(asc|desc)$"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
@@ -65,7 +66,15 @@ async def list_products(
 ):
     svc = CatalogService(db)
     facility_id = current_user.facility_id if current_user.role.value == "PRISON_ADMIN" else None
-    products = await svc.list_products(category_id=category_id, facility_id=facility_id, vendor_id=vendor_id, sort=sort, skip=skip, limit=limit)
+    products = await svc.list_products(
+        category_id=category_id,
+        facility_id=facility_id,
+        vendor_id=vendor_id,
+        name=name,
+        sort=sort,
+        skip=skip,
+        limit=limit,
+    )
     return [ProductResponse.model_validate(p) for p in products]
 
 

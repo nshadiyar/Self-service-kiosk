@@ -14,7 +14,7 @@ def validate_iin(v: str | None) -> str | None:
     if v is None or v == "":
         return None
     if not IIN_PATTERN.match(v):
-        raise ValueError("IIN must be exactly 12 digits")
+        raise ValueError("ИИН должен состоять ровно из 12 цифр")
     return v
 
 

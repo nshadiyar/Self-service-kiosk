@@ -36,7 +36,7 @@ class OrderService:
         )
         o = result.scalar_one_or_none()
         if not o:
-            raise NotFoundError("Order not found")
+            raise NotFoundError("Заказ не найден")
         return o
 
     async def list_orders(
@@ -64,7 +64,7 @@ class OrderService:
 
     async def create(self, user: User, data: OrderCreate) -> Order:
         if not user.facility_id:
-            raise ValidationError("User has no facility")
+            raise ValidationError("У пользователя не указано учреждение")
         facility_id = user.facility_id
 
         total = Decimal(0)
@@ -73,9 +73,9 @@ class OrderService:
             result = await self.db.execute(select(Product).where(Product.id == item.product_id))
             product = result.scalar_one_or_none()
             if not product:
-                raise NotFoundError(f"Product {item.product_id} not found")
+                raise NotFoundError(f"Товар {item.product_id} не найден")
             if product.stock_quantity < item.quantity:
-                raise ValidationError(f"Insufficient stock for {product.name}")
+                raise ValidationError(f"Недостаточно товара на складе: {product.name}")
             subtotal = product.price * item.quantity
             total += subtotal
             items_data.append((product, item.quantity, subtotal))
@@ -83,12 +83,12 @@ class OrderService:
         wallet_result = await self.db.execute(select(Wallet).where(Wallet.user_id == user.id))
         wallet = wallet_result.scalar_one_or_none()
         if not wallet:
-            raise NotFoundError("Wallet not found")
+            raise NotFoundError("Кошелек не найден")
         if (wallet.balance or 0) < total:
-            raise InsufficientFundsError("Insufficient wallet balance")
+            raise InsufficientFundsError("Недостаточно средств на кошельке")
         projected_monthly_spent = (wallet.monthly_spent or 0) + total
         if wallet.monthly_limit is not None and projected_monthly_spent > wallet.monthly_limit:
-            raise SpendingLimitExceededError("Monthly spending limit exceeded")
+            raise SpendingLimitExceededError("Превышен месячный лимит расходов")
 
         order = Order(user_id=user.id, facility_id=facility_id, total_amount=total, status=OrderStatus.PENDING)
         self.db.add(order)
@@ -108,7 +108,7 @@ class OrderService:
     async def approve(self, order_id: UUID) -> Order:
         order = await self.get_by_id(order_id)
         if order.status != OrderStatus.PENDING:
-            raise ValidationError("Order cannot be approved")
+            raise ValidationError("Заказ нельзя одобрить")
         order.status = OrderStatus.APPROVED
         await self.db.flush()
         await self.db.refresh(order)
@@ -117,7 +117,7 @@ class OrderService:
     async def reject(self, order_id: UUID, reason: str) -> Order:
         order = await self.get_by_id(order_id)
         if order.status != OrderStatus.PENDING:
-            raise ValidationError("Order cannot be rejected")
+            raise ValidationError("Заказ нельзя отклонить")
         order.status = OrderStatus.REJECTED
         order.rejection_reason = reason
         wallet_result = await self.db.execute(select(Wallet).where(Wallet.user_id == order.user_id))
