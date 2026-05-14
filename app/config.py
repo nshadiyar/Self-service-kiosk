@@ -83,20 +83,20 @@ class Settings(BaseSettings):
     minio_bucket_name: str = "inmate-photos"
     face_provider_name: str = "insightface_arcface_v1"
     face_model_name: str = "buffalo_l"
-    face_match_threshold: float = 0.58
-    face_login_min_blur_variance: float = 55.0
+    face_match_threshold: float = 0.70
+    face_login_min_blur_variance: float = 35.0
     face_login_min_brightness: float = 45.0
     face_login_max_brightness: float = 210.0
-    face_login_min_face_area_ratio: float = 0.05
+    face_login_min_face_area_ratio: float = 0.03
     face_login_min_eye_count: int = 1
-    face_login_hard_min_blur_variance: float = 20.0
-    face_login_hard_min_brightness: float = 25.0
-    face_login_hard_max_brightness: float = 235.0
-    face_login_min_quality_score: float = 0.28
-    face_match_min_gap: float = 0.045
-    face_match_max_quality_penalty: float = 0.08
-    face_match_max_liveness_penalty: float = 0.06
-    face_login_secondary_face_max_ratio: float = 0.55
+    face_login_hard_min_blur_variance: float = 12.0
+    face_login_hard_min_brightness: float = 18.0
+    face_login_hard_max_brightness: float = 245.0
+    face_login_min_quality_score: float = 0.18
+    face_match_min_gap: float = 0.08
+    face_match_max_quality_penalty: float = 0.10
+    face_match_max_liveness_penalty: float = 0.08
+    face_login_secondary_face_max_ratio: float = 0.75
 
     @property
     def s3_endpoint(self) -> str | None:
