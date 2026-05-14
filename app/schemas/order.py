@@ -23,6 +23,7 @@ class OrderCreate(BaseModel):
 class OrderItemResponse(BaseModel):
     id: UUID
     product_id: UUID
+    product_name: str | None = None
     quantity: int
     unit_price: Decimal
     subtotal: Decimal

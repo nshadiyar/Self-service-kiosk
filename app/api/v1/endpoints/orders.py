@@ -17,6 +17,17 @@ def _to_order_response(order) -> OrderResponse:
     payload = OrderResponse.model_validate(order).model_dump()
     payload["user_full_name"] = user_full_name
     payload["facility_name"] = facility_name
+    payload["items"] = [
+        {
+            "id": item.id,
+            "product_id": item.product_id,
+            "product_name": item.product.name if item.product else None,
+            "quantity": item.quantity,
+            "unit_price": item.unit_price,
+            "subtotal": item.subtotal,
+        }
+        for item in order.items
+    ]
     return OrderResponse(**payload)
 
 
