@@ -89,6 +89,14 @@ class Settings(BaseSettings):
     face_login_max_brightness: float = 210.0
     face_login_min_face_area_ratio: float = 0.05
     face_login_min_eye_count: int = 1
+    face_login_hard_min_blur_variance: float = 20.0
+    face_login_hard_min_brightness: float = 25.0
+    face_login_hard_max_brightness: float = 235.0
+    face_login_min_quality_score: float = 0.28
+    face_match_min_gap: float = 0.045
+    face_match_max_quality_penalty: float = 0.08
+    face_match_max_liveness_penalty: float = 0.06
+    face_login_secondary_face_max_ratio: float = 0.55
 
     @property
     def s3_endpoint(self) -> str | None:

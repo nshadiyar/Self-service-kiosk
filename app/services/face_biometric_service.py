@@ -98,37 +98,73 @@ class FaceBiometricService:
                 success=False,
                 failure_reason="No enrolled face biometrics found",
             )
-            raise AuthenticationError("No enrolled face biometrics found")
+            raise AuthenticationError("Пользователь не найден")
 
-        best_match: FaceBiometric | None = None
-        best_score = -1.0
-        for biometric in biometrics:
-            descriptor = np.asarray(json.loads(biometric.face_signature), dtype=np.float32)
-            score = self._cosine_similarity(sample.descriptor, descriptor)
-            if score > best_score:
-                best_score = score
-                best_match = biometric
+        evaluation = self.evaluate_candidates(sample=sample, biometrics=biometrics)
 
-        if not best_match or best_score < settings.face_match_threshold:
+        if (
+            evaluation["matched_user_id"] is None
+            or not evaluation["would_authenticate"]
+            or evaluation["best_biometric"] is None
+        ):
             await self._log_attempt(
                 user_id=None,
                 facility_id=facility_id,
-                score=best_score if best_score >= 0 else None,
+                score=evaluation["match_score"] if evaluation["match_score"] >= 0 else None,
                 liveness_score=sample.liveness_score,
                 success=False,
-                failure_reason="Face match threshold not reached",
+                failure_reason=evaluation["failure_reason"],
             )
-            raise AuthenticationError("Face authentication failed")
+            raise AuthenticationError("Пользователь не найден")
 
         await self._log_attempt(
-            user_id=best_match.user_id,
+            user_id=evaluation["matched_user_id"],
             facility_id=facility_id,
-            score=best_score,
+            score=evaluation["match_score"],
             liveness_score=sample.liveness_score,
             success=True,
             failure_reason=None,
         )
-        return best_match.user, best_score
+        return evaluation["best_biometric"].user, evaluation["match_score"]
+
+    def evaluate_candidates(self, *, sample: FaceFeatureSample, biometrics: list[FaceBiometric]) -> dict[str, object]:
+        best_by_user: dict[UUID, tuple[FaceBiometric, float]] = {}
+        for biometric in biometrics:
+            descriptor = np.asarray(json.loads(biometric.face_signature), dtype=np.float32)
+            score = self._cosine_similarity(sample.descriptor, descriptor)
+            current = best_by_user.get(biometric.user_id)
+            if current is None or score > current[1]:
+                best_by_user[biometric.user_id] = (biometric, score)
+
+        scored = sorted(best_by_user.values(), key=lambda item: item[1], reverse=True)
+        best_biometric = scored[0][0] if scored else None
+        best_score = scored[0][1] if scored else -1.0
+        second_best_score = scored[1][1] if len(scored) > 1 else None
+        score_gap = None if second_best_score is None else best_score - second_best_score
+        effective_threshold = self._effective_match_threshold(
+            quality_score=sample.quality_score,
+            liveness_score=sample.liveness_score,
+        )
+
+        failure_reason = None
+        would_authenticate = True
+        if best_biometric is None or best_score < effective_threshold:
+            would_authenticate = False
+            failure_reason = "Face match threshold not reached"
+        elif score_gap is not None and score_gap < settings.face_match_min_gap:
+            would_authenticate = False
+            failure_reason = "Face match is ambiguous"
+
+        return {
+            "matched_user_id": best_biometric.user_id if would_authenticate and best_biometric else None,
+            "best_biometric": best_biometric if would_authenticate else None,
+            "match_score": best_score,
+            "effective_threshold": effective_threshold,
+            "second_best_score": second_best_score,
+            "score_gap": score_gap,
+            "would_authenticate": would_authenticate,
+            "failure_reason": failure_reason,
+        }
 
     async def _log_attempt(
         self,
@@ -163,10 +199,10 @@ class FaceBiometricService:
         gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
 
         faces = self._analysis_app.get(bgr)
-        if len(faces) != 1:
-            raise ValidationError("Exactly one face must be visible in the image")
+        if not faces:
+            raise ValidationError("No face detected in the image")
 
-        face = faces[0]
+        face = self._select_primary_face(faces)
         bbox = getattr(face, "bbox", None)
         embedding = getattr(face, "embedding", None)
         kps = getattr(face, "kps", None)
@@ -205,12 +241,17 @@ class FaceBiometricService:
                 brightness=brightness,
                 eye_count=eye_count,
             )
-            if blur_variance < settings.face_login_min_blur_variance:
+            if blur_variance < settings.face_login_hard_min_blur_variance:
                 raise ValidationError("Image is too blurry for face authentication")
-            if brightness < settings.face_login_min_brightness or brightness > settings.face_login_max_brightness:
+            if (
+                brightness < settings.face_login_hard_min_brightness
+                or brightness > settings.face_login_hard_max_brightness
+            ):
                 raise ValidationError("Image lighting is unsuitable for face authentication")
             if eye_count < settings.face_login_min_eye_count:
                 raise ValidationError("Anti-spoof check failed: eyes not detected clearly")
+            if quality_score < settings.face_login_min_quality_score:
+                raise ValidationError("Image quality is too low for face authentication")
         else:
             liveness_score = None
 
@@ -237,6 +278,39 @@ class FaceBiometricService:
         if a.shape != b.shape:
             return 0.0
         return float(np.dot(a, b))
+
+    def _select_primary_face(self, faces: list[object]) -> object:
+        faces_with_area: list[tuple[object, float]] = []
+        for face in faces:
+            bbox = getattr(face, "bbox", None)
+            if bbox is None:
+                continue
+            x1, y1, x2, y2 = bbox
+            area = max(1.0, float((x2 - x1) * (y2 - y1)))
+            faces_with_area.append((face, area))
+
+        if not faces_with_area:
+            raise ValidationError("No face detected in the image")
+
+        faces_with_area.sort(key=lambda item: item[1], reverse=True)
+        primary_face, primary_area = faces_with_area[0]
+        if len(faces_with_area) > 1:
+            secondary_area = faces_with_area[1][1]
+            if (secondary_area / primary_area) >= settings.face_login_secondary_face_max_ratio:
+                raise ValidationError("Exactly one face must be visible in the image")
+        return primary_face
+
+    def _effective_match_threshold(self, *, quality_score: float, liveness_score: float | None) -> float:
+        effective = settings.face_match_threshold
+        quality_penalty = max(0.0, 0.65 - quality_score) / 0.65
+        effective += min(settings.face_match_max_quality_penalty, quality_penalty * settings.face_match_max_quality_penalty)
+        if liveness_score is not None:
+            liveness_penalty = max(0.0, 0.70 - liveness_score) / 0.70
+            effective += min(
+                settings.face_match_max_liveness_penalty,
+                liveness_penalty * settings.face_match_max_liveness_penalty,
+            )
+        return round(min(0.99, effective), 4)
 
     def _calculate_liveness_score(self, *, blur_variance: float, brightness: float, eye_count: int) -> float:
         blur_component = min(1.0, blur_variance / max(settings.face_login_min_blur_variance * 2, 1.0))

@@ -30,11 +30,17 @@ async def get_face_config(current_user=Depends(require_admin)):
     return FaceTuningConfigResponse(
         provider=settings.face_provider_name,
         match_threshold=settings.face_match_threshold,
+        match_min_gap=settings.face_match_min_gap,
         min_blur_variance=settings.face_login_min_blur_variance,
+        hard_min_blur_variance=settings.face_login_hard_min_blur_variance,
         min_brightness=settings.face_login_min_brightness,
         max_brightness=settings.face_login_max_brightness,
+        hard_min_brightness=settings.face_login_hard_min_brightness,
+        hard_max_brightness=settings.face_login_hard_max_brightness,
         min_face_area_ratio=settings.face_login_min_face_area_ratio,
+        min_quality_score=settings.face_login_min_quality_score,
         min_eye_count=settings.face_login_min_eye_count,
+        secondary_face_max_ratio=settings.face_login_secondary_face_max_ratio,
     )
 
 
@@ -135,22 +141,17 @@ async def evaluate_face_tuning(
     result = await db.execute(query)
     biometrics = list(result.scalars().all())
 
-    matched_user_id = None
-    best_score = 0.0
-    for biometric in biometrics:
-        import json
-        import numpy as np
-
-        descriptor = np.asarray(json.loads(biometric.face_signature), dtype=np.float32)
-        score = face_service._cosine_similarity(sample.descriptor, descriptor)
-        if score > best_score:
-            best_score = score
-            matched_user_id = biometric.user_id
+    evaluation = face_service.evaluate_candidates(sample=sample, biometrics=biometrics)
 
     return FaceTuningEvaluationResponse(
-        matched_user_id=matched_user_id,
-        match_score=best_score,
+        matched_user_id=evaluation["matched_user_id"],
+        match_score=evaluation["match_score"],
         threshold=settings.face_match_threshold,
-        would_authenticate=best_score >= settings.face_match_threshold,
+        effective_threshold=evaluation["effective_threshold"],
+        second_best_score=evaluation["second_best_score"],
+        score_gap=evaluation["score_gap"],
+        quality_score=sample.quality_score,
+        liveness_score=sample.liveness_score,
+        would_authenticate=evaluation["would_authenticate"],
         provider=settings.face_provider_name,
     )
