@@ -11,6 +11,7 @@ from app.core.security import (
 from app.core.exceptions import AuthenticationError
 from app.core.enums import UserRole
 from app.models.user import User
+from app.schemas.auth import FaceClientMetadata
 from app.services.face_biometric_service import FaceBiometricService
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -54,9 +55,19 @@ class AuthService:
             raise AuthenticationError("User not found")
         return create_access_token(user.id), create_refresh_token(user.id), user.role
 
-    async def face_login(self, *, file_bytes: bytes, facility_id: UUID | None) -> tuple[str, str, UserRole, UUID, float, str]:
+    async def face_login(
+        self,
+        *,
+        file_bytes: bytes,
+        facility_id: UUID | None,
+        client_metadata: FaceClientMetadata | None = None,
+    ) -> tuple[str, str, UserRole, UUID, float, str]:
         face_service = FaceBiometricService(self.db)
-        user, match_score = await face_service.authenticate(file_bytes=file_bytes, facility_id=facility_id)
+        user, match_score = await face_service.authenticate(
+            file_bytes=file_bytes,
+            facility_id=facility_id,
+            client_metadata=client_metadata,
+        )
         access = create_access_token(user.id)
         refresh = create_refresh_token(user.id)
         return access, refresh, user.role, user.id, match_score, settings.face_provider_name

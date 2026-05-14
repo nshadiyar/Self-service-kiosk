@@ -144,14 +144,14 @@ async def evaluate_face_tuning(
     evaluation = face_service.evaluate_candidates(sample=sample, biometrics=biometrics)
 
     return FaceTuningEvaluationResponse(
-        matched_user_id=evaluation["matched_user_id"],
-        match_score=evaluation["match_score"],
+        matched_user_id=evaluation.matched_user_id,
+        match_score=evaluation.match_score,
         threshold=settings.face_match_threshold,
-        effective_threshold=evaluation["effective_threshold"],
-        second_best_score=evaluation["second_best_score"],
-        score_gap=evaluation["score_gap"],
+        effective_threshold=evaluation.effective_threshold,
+        second_best_score=evaluation.second_best_score,
+        score_gap=evaluation.score_gap,
         quality_score=sample.quality_score,
         liveness_score=sample.liveness_score,
-        would_authenticate=evaluation["would_authenticate"],
+        would_authenticate=evaluation.would_authenticate,
         provider=settings.face_provider_name,
     )

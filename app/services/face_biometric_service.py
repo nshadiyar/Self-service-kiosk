@@ -17,6 +17,7 @@ from app.core.exceptions import AuthenticationError, ValidationError
 from app.models.face_auth_attempt import FaceAuthAttempt
 from app.models.face_biometric import FaceBiometric
 from app.models.user import User
+from app.schemas.auth import FaceClientMetadata
 
 
 @dataclass
@@ -24,6 +25,23 @@ class FaceFeatureSample:
     descriptor: np.ndarray
     quality_score: float
     liveness_score: float | None
+    blur_variance: float
+    brightness: float
+    face_area_ratio: float
+    eye_count: int
+    detected_face_count: int
+
+
+@dataclass
+class FaceMatchEvaluation:
+    matched_user_id: UUID | None
+    best_biometric: FaceBiometric | None
+    match_score: float
+    effective_threshold: float
+    second_best_score: float | None
+    score_gap: float | None
+    would_authenticate: bool
+    failure_reason: str | None
 
 
 class FaceBiometricService:
@@ -74,7 +92,13 @@ class FaceBiometricService:
         await self.db.refresh(biometric)
         return biometric
 
-    async def authenticate(self, *, file_bytes: bytes, facility_id: UUID | None) -> tuple[User, float]:
+    async def authenticate(
+        self,
+        *,
+        file_bytes: bytes,
+        facility_id: UUID | None,
+        client_metadata: FaceClientMetadata | None = None,
+    ) -> tuple[User, float]:
         sample = self._extract_face_sample(file_bytes, enforce_liveness=True)
 
         query = (
@@ -94,7 +118,16 @@ class FaceBiometricService:
                 user_id=None,
                 facility_id=facility_id,
                 score=None,
+                effective_threshold=None,
+                second_best_score=None,
+                score_gap=None,
+                quality_score=sample.quality_score,
                 liveness_score=sample.liveness_score,
+                blur_variance=sample.blur_variance,
+                brightness=sample.brightness,
+                face_area_ratio=sample.face_area_ratio,
+                eye_count=sample.eye_count,
+                client_metadata=client_metadata,
                 success=False,
                 failure_reason="No enrolled face biometrics found",
             )
@@ -103,31 +136,49 @@ class FaceBiometricService:
         evaluation = self.evaluate_candidates(sample=sample, biometrics=biometrics)
 
         if (
-            evaluation["matched_user_id"] is None
-            or not evaluation["would_authenticate"]
-            or evaluation["best_biometric"] is None
+            evaluation.matched_user_id is None
+            or not evaluation.would_authenticate
+            or evaluation.best_biometric is None
         ):
             await self._log_attempt(
                 user_id=None,
                 facility_id=facility_id,
-                score=evaluation["match_score"] if evaluation["match_score"] >= 0 else None,
+                score=evaluation.match_score if evaluation.match_score >= 0 else None,
+                effective_threshold=evaluation.effective_threshold,
+                second_best_score=evaluation.second_best_score,
+                score_gap=evaluation.score_gap,
+                quality_score=sample.quality_score,
                 liveness_score=sample.liveness_score,
+                blur_variance=sample.blur_variance,
+                brightness=sample.brightness,
+                face_area_ratio=sample.face_area_ratio,
+                eye_count=sample.eye_count,
+                client_metadata=client_metadata,
                 success=False,
-                failure_reason=evaluation["failure_reason"],
+                failure_reason=evaluation.failure_reason,
             )
             raise AuthenticationError("Пользователь не найден")
 
         await self._log_attempt(
-            user_id=evaluation["matched_user_id"],
+            user_id=evaluation.matched_user_id,
             facility_id=facility_id,
-            score=evaluation["match_score"],
+            score=evaluation.match_score,
+            effective_threshold=evaluation.effective_threshold,
+            second_best_score=evaluation.second_best_score,
+            score_gap=evaluation.score_gap,
+            quality_score=sample.quality_score,
             liveness_score=sample.liveness_score,
+            blur_variance=sample.blur_variance,
+            brightness=sample.brightness,
+            face_area_ratio=sample.face_area_ratio,
+            eye_count=sample.eye_count,
+            client_metadata=client_metadata,
             success=True,
             failure_reason=None,
         )
-        return evaluation["best_biometric"].user, evaluation["match_score"]
+        return evaluation.best_biometric.user, evaluation.match_score
 
-    def evaluate_candidates(self, *, sample: FaceFeatureSample, biometrics: list[FaceBiometric]) -> dict[str, object]:
+    def evaluate_candidates(self, *, sample: FaceFeatureSample, biometrics: list[FaceBiometric]) -> FaceMatchEvaluation:
         best_by_user: dict[UUID, tuple[FaceBiometric, float]] = {}
         for biometric in biometrics:
             descriptor = np.asarray(json.loads(biometric.face_signature), dtype=np.float32)
@@ -155,16 +206,16 @@ class FaceBiometricService:
             would_authenticate = False
             failure_reason = "Face match is ambiguous"
 
-        return {
-            "matched_user_id": best_biometric.user_id if would_authenticate and best_biometric else None,
-            "best_biometric": best_biometric if would_authenticate else None,
-            "match_score": best_score,
-            "effective_threshold": effective_threshold,
-            "second_best_score": second_best_score,
-            "score_gap": score_gap,
-            "would_authenticate": would_authenticate,
-            "failure_reason": failure_reason,
-        }
+        return FaceMatchEvaluation(
+            matched_user_id=best_biometric.user_id if would_authenticate and best_biometric else None,
+            best_biometric=best_biometric if would_authenticate else None,
+            match_score=best_score,
+            effective_threshold=effective_threshold,
+            second_best_score=second_best_score,
+            score_gap=score_gap,
+            would_authenticate=would_authenticate,
+            failure_reason=failure_reason,
+        )
 
     async def _log_attempt(
         self,
@@ -172,7 +223,16 @@ class FaceBiometricService:
         user_id: UUID | None,
         facility_id: UUID | None,
         score: float | None,
+        effective_threshold: float | None,
+        second_best_score: float | None,
+        score_gap: float | None,
+        quality_score: float | None,
         liveness_score: float | None,
+        blur_variance: float | None,
+        brightness: float | None,
+        face_area_ratio: float | None,
+        eye_count: int | None,
+        client_metadata: FaceClientMetadata | None,
         success: bool,
         failure_reason: str | None,
     ) -> None:
@@ -182,7 +242,21 @@ class FaceBiometricService:
             provider=settings.face_provider_name,
             match_score=score,
             threshold=settings.face_match_threshold,
+            effective_threshold=effective_threshold,
+            second_best_score=second_best_score,
+            score_gap=score_gap,
+            quality_score=quality_score,
             liveness_score=liveness_score,
+            blur_variance=blur_variance,
+            brightness=brightness,
+            face_area_ratio=face_area_ratio,
+            eye_count=eye_count,
+            capture_width=client_metadata.capture_width if client_metadata else None,
+            capture_height=client_metadata.capture_height if client_metadata else None,
+            client_face_count=client_metadata.client_face_count if client_metadata else None,
+            client_blur_score=client_metadata.client_blur_score if client_metadata else None,
+            client_brightness=client_metadata.client_brightness if client_metadata else None,
+            client_face_bbox=client_metadata.face_bbox if client_metadata else None,
             success=success,
             failure_reason=failure_reason,
         )
@@ -199,6 +273,7 @@ class FaceBiometricService:
         gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
 
         faces = self._analysis_app.get(bgr)
+        detected_face_count = len(faces)
         if not faces:
             raise ValidationError("No face detected in the image")
 
@@ -265,6 +340,11 @@ class FaceBiometricService:
             descriptor=descriptor,
             quality_score=quality_score,
             liveness_score=liveness_score,
+            blur_variance=blur_variance,
+            brightness=brightness,
+            face_area_ratio=face_area_ratio,
+            eye_count=eye_count,
+            detected_face_count=detected_face_count,
         )
 
     def _load_image(self, file_bytes: bytes) -> Image.Image:

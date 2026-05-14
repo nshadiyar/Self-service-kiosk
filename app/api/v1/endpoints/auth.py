@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 
 from app.dependencies import get_db, CurrentUserDep
-from app.schemas.auth import FaceLoginResponse, LoginRequest, Token, RefreshRequest
+from app.schemas.auth import FaceClientMetadata, FaceLoginResponse, LoginRequest, Token, RefreshRequest
 from app.services.auth_service import AuthService
 from app.core.security import get_current_user_dep
 
@@ -27,6 +27,12 @@ async def refresh(data: RefreshRequest, db=Depends(get_db)):
 @router.post("/face-login", response_model=FaceLoginResponse)
 async def face_login(
     facility_id: UUID | None = Form(None),
+    capture_width: int | None = Form(None),
+    capture_height: int | None = Form(None),
+    client_face_count: int | None = Form(None),
+    client_blur_score: float | None = Form(None),
+    client_brightness: float | None = Form(None),
+    face_bbox: str | None = Form(None),
     file: UploadFile = File(...),
     db=Depends(get_db),
 ):
@@ -39,9 +45,18 @@ async def face_login(
 
     svc = AuthService(db)
     file_bytes = await file.read()
+    client_metadata = FaceClientMetadata(
+        capture_width=capture_width,
+        capture_height=capture_height,
+        client_face_count=client_face_count,
+        client_blur_score=client_blur_score,
+        client_brightness=client_brightness,
+        face_bbox=face_bbox,
+    )
     access, refresh, user_role, matched_user_id, match_score, provider = await svc.face_login(
         file_bytes=file_bytes,
         facility_id=facility_id,
+        client_metadata=client_metadata,
     )
     return FaceLoginResponse(
         access_token=access,

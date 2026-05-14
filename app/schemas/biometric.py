@@ -24,7 +24,21 @@ class FaceAuthAttemptResponse(BaseModel):
     provider: str
     match_score: float | None
     threshold: float | None
+    effective_threshold: float | None
+    second_best_score: float | None
+    score_gap: float | None
+    quality_score: float | None
     liveness_score: float | None
+    blur_variance: float | None
+    brightness: float | None
+    face_area_ratio: float | None
+    eye_count: int | None
+    capture_width: int | None
+    capture_height: int | None
+    client_face_count: int | None
+    client_blur_score: float | None
+    client_brightness: float | None
+    client_face_bbox: str | None
     success: bool
     failure_reason: str | None
     created_at: datetime

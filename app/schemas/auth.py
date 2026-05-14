@@ -31,3 +31,12 @@ class FaceLoginResponse(Token):
     matched_user_id: UUID
     match_score: float
     provider: str
+
+
+class FaceClientMetadata(BaseModel):
+    capture_width: int | None = None
+    capture_height: int | None = None
+    client_face_count: int | None = None
+    client_blur_score: float | None = None
+    client_brightness: float | None = None
+    face_bbox: str | None = None
