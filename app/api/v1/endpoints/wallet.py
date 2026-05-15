@@ -11,6 +11,7 @@ from app.schemas.wallet import (
     TopUpRequest,
     WalletResponse,
 )
+from app.services.audit_service import AuditService
 from app.services.wallet_service import WalletService
 from app.core.security import require_admin, require_inmate, require_super_admin
 
@@ -42,6 +43,15 @@ async def top_up(
 
     svc = WalletService(db)
     wallet = await svc.top_up(data.user_id, data.amount)
+    audit = AuditService(db)
+    await audit.log_event(
+        actor=current_user,
+        action="TOP_UP_WALLET",
+        entity_type="wallet",
+        entity_id=str(wallet.id),
+        summary=f"Пополнен кошелек пользователя {data.user_id}",
+        payload_after={"user_id": str(data.user_id), "amount": float(data.amount)},
+    )
     return WalletResponse.model_validate(wallet)
 
 
@@ -80,7 +90,17 @@ async def update_security_regime_limit(
     current_user=Depends(require_super_admin),
 ):
     svc = WalletService(db)
-    return await svc.upsert_security_regime_limit(
+    result = await svc.upsert_security_regime_limit(
         security_regime=data.security_regime,
         monthly_limit=data.monthly_limit,
     )
+    audit = AuditService(db)
+    await audit.log_event(
+        actor=current_user,
+        action="UPDATE_SECURITY_REGIME_LIMIT",
+        entity_type="security_regime_limit",
+        entity_id=data.security_regime.value,
+        summary=f"Изменен месячный лимит для режима {data.security_regime.value}",
+        payload_after={"security_regime": data.security_regime.value, "monthly_limit": float(data.monthly_limit)},
+    )
+    return result

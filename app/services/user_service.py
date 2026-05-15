@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -38,14 +38,32 @@ class UserService:
         self,
         facility_id: UUID | None = None,
         role: UserRole | None = None,
+        security_regime: SecurityRegime | None = None,
+        is_active: bool | None = None,
+        search: str | None = None,
         skip: int = 0,
         limit: int = 20,
     ):
-        q = select(User).options(selectinload(User.facility), selectinload(User.wallet)).where(User.is_active == True)
+        q = select(User).options(selectinload(User.facility), selectinload(User.wallet))
         if facility_id is not None:
             q = q.where(User.facility_id == facility_id)
         if role is not None:
             q = q.where(User.role == role)
+        if security_regime is not None:
+            q = q.where(User.security_regime == security_regime.value)
+        if is_active is not None:
+            q = q.where(User.is_active == is_active)
+        else:
+            q = q.where(User.is_active == True)
+        if search is not None and search.strip():
+            pattern = f"%{search.strip()}%"
+            q = q.where(
+                or_(
+                    User.full_name.ilike(pattern),
+                    User.email.ilike(pattern),
+                    User.iin.ilike(pattern),
+                )
+            )
         q = q.offset(skip).limit(limit)
         result = await self.db.execute(q)
         return list(result.scalars().all())

@@ -3,7 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 
-from app.core.enums import SecurityRegime, UserRole
+from app.core.enums import OrderStatus, SecurityRegime, UserRole
 from app.dependencies import get_db
 from app.schemas.user import (
     InmateCreateWithPhotoResponse,
@@ -14,10 +14,14 @@ from app.schemas.user import (
 )
 from app.core.exceptions import AuthorizationError, ValidationError
 from app.services.face_biometric_service import FaceBiometricService
+from app.services.order_service import OrderService
 from app.services.storage_service import MinioStorageService
 from app.services.user_service import UserService
 from app.services.wallet_service import WalletService
+from app.services.audit_service import AuditService
 from app.core.security import require_admin, require_super_admin
+from app.schemas.order import OrderResponse
+from app.schemas.wallet import WalletResponse
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -30,10 +34,33 @@ def _to_user_response(user) -> UserResponse:
     return UserResponse(**payload)
 
 
+def _to_order_response(order) -> OrderResponse:
+    user_full_name = order.user.full_name if order.user else None
+    facility_name = order.facility.name if order.facility else None
+    payload = OrderResponse.model_validate(order).model_dump()
+    payload["user_full_name"] = user_full_name
+    payload["facility_name"] = facility_name
+    payload["items"] = [
+        {
+            "id": item.id,
+            "product_id": item.product_id,
+            "product_name": item.product.name if item.product else None,
+            "quantity": item.quantity,
+            "unit_price": item.unit_price,
+            "subtotal": item.subtotal,
+        }
+        for item in order.items
+    ]
+    return OrderResponse(**payload)
+
+
 @router.get("", response_model=list[UserResponse])
 async def list_users(
     facility_id: UUID | None = Query(None),
     role: UserRole | None = Query(None),
+    security_regime: SecurityRegime | None = Query(None),
+    is_active: bool | None = Query(None),
+    search: str | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     db=Depends(get_db),
@@ -45,7 +72,15 @@ async def list_users(
     elif facility_id is not None:
         facility_filter = facility_id
     svc = UserService(db)
-    users = await svc.list_users(facility_id=facility_filter, role=role, skip=skip, limit=limit)
+    users = await svc.list_users(
+        facility_id=facility_filter,
+        role=role,
+        security_regime=security_regime,
+        is_active=is_active,
+        search=search,
+        skip=skip,
+        limit=limit,
+    )
     return [_to_user_response(u) for u in users]
 
 
@@ -125,10 +160,19 @@ async def create_inmate_with_photo(
     user = await svc.get_by_id(created.id)
     updated, biometric = await _store_and_enroll_inmate_photo(db=db, user=user, file=file)
     response_user = await svc.get_by_id(updated.id)
-
-    response = _to_user_response(response_user).model_dump()
+    response_model = _to_user_response(response_user)
+    response = response_model.model_dump()
     response["biometric_enrolled"] = True
     response["biometric_provider"] = biometric.provider
+    audit = AuditService(db)
+    await audit.log_event(
+        actor=current_user,
+        action="CREATE_INMATE",
+        entity_type="user",
+        entity_id=str(response_user.id),
+        summary=f"Создан заключенный {response_user.full_name}",
+        payload_after=InmateCreateWithPhotoResponse(**response).model_dump(mode="json"),
+    )
     return InmateCreateWithPhotoResponse(**response)
 
 
@@ -141,6 +185,43 @@ async def get_user(user_id: UUID, db=Depends(get_db), current_user=Depends(requi
     return _to_user_response(user)
 
 
+@router.get("/{user_id}/orders", response_model=list[OrderResponse])
+async def get_inmate_orders(
+    user_id: UUID,
+    status: OrderStatus | None = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    db=Depends(get_db),
+    current_user=Depends(require_admin),
+):
+    svc = UserService(db)
+    user = await svc.get_by_id(user_id)
+    if user.role != UserRole.INMATE:
+        raise ValidationError("Пользователь не является заключенным")
+    if current_user.role.value == "PRISON_ADMIN" and current_user.facility_id != user.facility_id:
+        raise AuthorizationError("Доступ запрещен")
+    order_svc = OrderService(db)
+    orders = await order_svc.list_orders(user_id=user_id, status=status, skip=skip, limit=limit)
+    return [_to_order_response(order) for order in orders]
+
+
+@router.get("/{user_id}/wallet", response_model=WalletResponse)
+async def get_inmate_wallet(
+    user_id: UUID,
+    db=Depends(get_db),
+    current_user=Depends(require_admin),
+):
+    svc = UserService(db)
+    user = await svc.get_by_id(user_id)
+    if user.role != UserRole.INMATE:
+        raise ValidationError("Пользователь не является заключенным")
+    if current_user.role.value == "PRISON_ADMIN" and current_user.facility_id != user.facility_id:
+        raise AuthorizationError("Доступ запрещен")
+    wallet_svc = WalletService(db)
+    wallet = await wallet_svc.get_by_user_id(user_id)
+    return WalletResponse.model_validate(wallet)
+
+
 @router.post("", response_model=UserResponse)
 async def create_user(data: UserCreate, db=Depends(get_db), current_user=Depends(require_super_admin)):
     if data.role == UserRole.INMATE:
@@ -148,6 +229,15 @@ async def create_user(data: UserCreate, db=Depends(get_db), current_user=Depends
     svc = UserService(db)
     created = await svc.create(data)
     user = await svc.get_by_id(created.id)
+    audit = AuditService(db)
+    await audit.log_event(
+        actor=current_user,
+        action="CREATE_USER",
+        entity_type="user",
+        entity_id=str(user.id),
+        summary=f"Создан пользователь {user.full_name}",
+        payload_after=_to_user_response(user).model_dump(mode="json"),
+    )
     return _to_user_response(user)
 
 
@@ -159,8 +249,20 @@ async def update_user(user_id: UUID, data: UserUpdate, db=Depends(get_db), curre
         if user.facility_id != current_user.facility_id:
             raise AuthorizationError("Доступ запрещен")
     svc = UserService(db)
+    before = await svc.get_by_id(user_id)
+    before_payload = _to_user_response(before).model_dump(mode="json")
     updated = await svc.update(user_id, data)
     user = await svc.get_by_id(updated.id)
+    audit = AuditService(db)
+    await audit.log_event(
+        actor=current_user,
+        action="UPDATE_USER",
+        entity_type="user",
+        entity_id=str(user.id),
+        summary=f"Обновлен пользователь {user.full_name}",
+        payload_before=before_payload,
+        payload_after=_to_user_response(user).model_dump(mode="json"),
+    )
     return _to_user_response(user)
 
 
@@ -175,6 +277,7 @@ async def update_inmate_settings(
     user = await svc.get_by_id(user_id)
     if user.role != UserRole.INMATE:
         raise ValidationError("Пользователь не является заключенным")
+    before_payload = _to_user_response(user).model_dump(mode="json")
 
     if "security_regime" in data.model_fields_set and data.security_regime is not None:
         user.security_regime = data.security_regime.value
@@ -189,4 +292,14 @@ async def update_inmate_settings(
 
     await db.flush()
     refreshed = await svc.get_by_id(user.id)
+    audit = AuditService(db)
+    await audit.log_event(
+        actor=current_user,
+        action="UPDATE_INMATE_SETTINGS",
+        entity_type="user",
+        entity_id=str(refreshed.id),
+        summary=f"Обновлены настройки заключенного {refreshed.full_name}",
+        payload_before=before_payload,
+        payload_after=_to_user_response(refreshed).model_dump(mode="json"),
+    )
     return _to_user_response(refreshed)

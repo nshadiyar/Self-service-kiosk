@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.dependencies import get_db
 from app.schemas.order import OrderCreate, OrderResponse, RejectOrderRequest
+from app.services.audit_service import AuditService
 from app.services.order_service import OrderService
 from app.core.security import get_current_user_dep, require_admin, require_inmate
 from app.core.enums import OrderStatus
@@ -90,6 +91,15 @@ async def approve_order(
         from app.core.exceptions import AuthorizationError
         raise AuthorizationError("Доступ запрещен")
     order = await svc.approve(order_id)
+    audit = AuditService(db)
+    await audit.log_event(
+        actor=current_user,
+        action="APPROVE_ORDER",
+        entity_type="order",
+        entity_id=str(order.id),
+        summary=f"Одобрен заказ {order.id}",
+        payload_after=_to_order_response(order).model_dump(mode="json"),
+    )
     return _to_order_response(order)
 
 
@@ -106,4 +116,13 @@ async def reject_order(
         from app.core.exceptions import AuthorizationError
         raise AuthorizationError("Доступ запрещен")
     order = await svc.reject(order_id, data.reason)
+    audit = AuditService(db)
+    await audit.log_event(
+        actor=current_user,
+        action="REJECT_ORDER",
+        entity_type="order",
+        entity_id=str(order.id),
+        summary=f"Отклонен заказ {order.id}",
+        payload_after=_to_order_response(order).model_dump(mode="json"),
+    )
     return _to_order_response(order)

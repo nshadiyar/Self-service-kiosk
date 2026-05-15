@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, biometrics, users, facilities, catalog, orders, wallet
+from app.api.v1.endpoints import admin, auth, biometrics, users, facilities, catalog, orders, wallet
 
 router = APIRouter(prefix="/api/v1")
 
@@ -11,3 +11,4 @@ router.include_router(facilities.router)
 router.include_router(catalog.router)
 router.include_router(orders.router)
 router.include_router(wallet.router)
+router.include_router(admin.router)

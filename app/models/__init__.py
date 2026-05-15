@@ -10,6 +10,7 @@ from app.models.wallet_transaction import WalletTransaction
 from app.models.face_biometric import FaceBiometric
 from app.models.face_auth_attempt import FaceAuthAttempt
 from app.models.security_regime_limit import SecurityRegimeLimit
+from app.models.audit_log import AuditLog
 
 __all__ = [
     "User",
@@ -24,4 +25,5 @@ __all__ = [
     "FaceBiometric",
     "FaceAuthAttempt",
     "SecurityRegimeLimit",
+    "AuditLog",
 ]
