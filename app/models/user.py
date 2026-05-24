@@ -34,6 +34,7 @@ class User(Base):
 
     facility = relationship("Facility", back_populates="users")
     wallet = relationship("Wallet", back_populates="user", uselist=False)
-    orders = relationship("Order", back_populates="user")
+    orders = relationship("Order", back_populates="user", foreign_keys="Order.user_id")
+    assigned_orders = relationship("Order", back_populates="courier", foreign_keys="Order.courier_id")
     face_biometrics = relationship("FaceBiometric", back_populates="user", cascade="all, delete-orphan")
     face_auth_attempts = relationship("FaceAuthAttempt", back_populates="user")

@@ -84,5 +84,14 @@ def require_roles(*roles: UserRole):
 
 require_super_admin = require_roles(UserRole.SUPER_ADMIN)
 require_admin = require_roles(UserRole.SUPER_ADMIN, UserRole.PRISON_ADMIN)
+require_catalog_manager = require_roles(UserRole.SUPER_ADMIN, UserRole.WAREHOUSE_MANAGER)
+require_warehouse = require_roles(UserRole.SUPER_ADMIN, UserRole.WAREHOUSE_MANAGER)
+require_courier = require_roles(UserRole.SUPER_ADMIN, UserRole.COURIER)
 require_inmate = require_roles(UserRole.INMATE)
-require_any_user = require_roles(UserRole.SUPER_ADMIN, UserRole.PRISON_ADMIN, UserRole.INMATE)
+require_any_user = require_roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.PRISON_ADMIN,
+    UserRole.WAREHOUSE_MANAGER,
+    UserRole.COURIER,
+    UserRole.INMATE,
+)

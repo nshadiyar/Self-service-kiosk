@@ -10,6 +10,7 @@ from app.schemas.facility import FacilityCreate, FacilityUpdate, FacilityRespons
 from app.schemas.catalog import CategoryResponse, ProductResponse
 from app.schemas.order import OrderCreate, OrderResponse, OrderItemCreate, OrderItemResponse
 from app.schemas.wallet import WalletResponse, TopUpRequest
+from app.schemas.feedback import FeedbackCreate, FeedbackResponse
 from app.schemas.biometric import (
     FaceAnalyticsSummary,
     FaceAuthAttemptResponse,

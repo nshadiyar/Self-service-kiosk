@@ -58,6 +58,40 @@ class WalletService:
         await self.db.refresh(wallet)
         return wallet
 
+    async def apply_order_payment(self, user_id: UUID, amount: Decimal, order_id: UUID) -> Wallet:
+        wallet = await self.get_by_user_id(user_id)
+        wallet.balance = (wallet.balance or Decimal(0)) - amount
+        wallet.monthly_spent = (wallet.monthly_spent or Decimal(0)) + amount
+        tx = WalletTransaction(
+            wallet_id=wallet.id,
+            type=TransactionType.ORDER_PAYMENT,
+            amount=amount,
+            balance_after=wallet.balance,
+            reference_type="order",
+            reference_id=order_id,
+        )
+        self.db.add(tx)
+        await self.db.flush()
+        await self.db.refresh(wallet)
+        return wallet
+
+    async def refund_order_payment(self, user_id: UUID, amount: Decimal, order_id: UUID) -> Wallet:
+        wallet = await self.get_by_user_id(user_id)
+        wallet.balance = (wallet.balance or Decimal(0)) + amount
+        wallet.monthly_spent = max((wallet.monthly_spent or Decimal(0)) - amount, Decimal(0))
+        tx = WalletTransaction(
+            wallet_id=wallet.id,
+            type=TransactionType.REFUND,
+            amount=amount,
+            balance_after=wallet.balance,
+            reference_type="order",
+            reference_id=order_id,
+        )
+        self.db.add(tx)
+        await self.db.flush()
+        await self.db.refresh(wallet)
+        return wallet
+
     async def update_monthly_limit(self, user_id: UUID, monthly_limit: Decimal | None) -> Wallet:
         wallet = await self.get_by_user_id(user_id)
         wallet.monthly_limit = monthly_limit

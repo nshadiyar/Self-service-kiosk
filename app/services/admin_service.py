@@ -34,7 +34,7 @@ class AdminService:
 
     @staticmethod
     def _active_order_filter():
-        return Order.status.not_in([OrderStatus.REJECTED, OrderStatus.CANCELLED])
+        return Order.status == OrderStatus.DELIVERED
 
     @staticmethod
     def _date_filters(date_from: date | None = None, date_to: date | None = None):

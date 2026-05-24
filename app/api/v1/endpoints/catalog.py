@@ -14,7 +14,9 @@ from app.schemas.catalog import (
 )
 from app.services.catalog_service import CatalogService
 from app.services.audit_service import AuditService
-from app.core.security import get_current_user_dep, require_super_admin
+from app.core.enums import UserRole
+from app.core.exceptions import AuthorizationError
+from app.core.security import get_current_user_dep, require_catalog_manager
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
 
@@ -25,6 +27,27 @@ def _to_product_response(product) -> ProductResponse:
     payload["vendor_name"] = product.vendor.name if product.vendor else None
     payload["facility_name"] = product.facility.name if product.facility else None
     return ProductResponse(**payload)
+
+
+def _apply_catalog_write_scope(current_user, data):
+    if current_user.role != UserRole.WAREHOUSE_MANAGER:
+        return data
+    if current_user.facility_id is None:
+        return data
+    if getattr(data, "facility_id", None) is not None and data.facility_id != current_user.facility_id:
+        raise AuthorizationError("Начальник склада может управлять товарами только своего учреждения")
+    if getattr(data, "facility_id", None) is None:
+        return data.model_copy(update={"facility_id": current_user.facility_id})
+    return data
+
+
+def _ensure_existing_product_write_scope(current_user, product, data=None) -> None:
+    if current_user.role != UserRole.WAREHOUSE_MANAGER or current_user.facility_id is None:
+        return
+    if product.facility_id not in {None, current_user.facility_id}:
+        raise AuthorizationError("Доступ запрещен")
+    if data is not None and "facility_id" in getattr(data, "model_fields_set", set()):
+        raise AuthorizationError("Начальник склада не может менять привязку товара к учреждению")
 
 
 @router.get("/categories", response_model=list[CategoryResponse])
@@ -128,9 +151,10 @@ async def get_product(
 async def create_product(
     data: ProductCreate,
     db=Depends(get_db),
-    current_user=Depends(require_super_admin),
+    current_user=Depends(require_catalog_manager),
 ):
     svc = CatalogService(db)
+    data = _apply_catalog_write_scope(current_user, data)
     product = await svc.create_product(data)
     audit = AuditService(db)
     await audit.log_event(
@@ -149,10 +173,11 @@ async def update_product(
     product_id: UUID,
     data: ProductUpdate,
     db=Depends(get_db),
-    current_user=Depends(require_super_admin),
+    current_user=Depends(require_catalog_manager),
 ):
     svc = CatalogService(db)
     before = await svc.get_product(product_id)
+    _ensure_existing_product_write_scope(current_user, before, data)
     before_payload = _to_product_response(before).model_dump(mode="json")
     product = await svc.update_product(product_id, data)
     audit = AuditService(db)
@@ -172,10 +197,11 @@ async def update_product(
 async def deactivate_product(
     product_id: UUID,
     db=Depends(get_db),
-    current_user=Depends(require_super_admin),
+    current_user=Depends(require_catalog_manager),
 ):
     svc = CatalogService(db)
     before = await svc.get_product(product_id)
+    _ensure_existing_product_write_scope(current_user, before)
     before_payload = _to_product_response(before).model_dump(mode="json")
     product = await svc.deactivate_product(product_id)
     audit = AuditService(db)
@@ -196,10 +222,11 @@ async def update_product_stock(
     product_id: UUID,
     data: ProductStockUpdate,
     db=Depends(get_db),
-    current_user=Depends(require_super_admin),
+    current_user=Depends(require_catalog_manager),
 ):
     svc = CatalogService(db)
     before = await svc.get_product(product_id)
+    _ensure_existing_product_write_scope(current_user, before)
     before_payload = _to_product_response(before).model_dump(mode="json")
     product = await svc.update_product_stock(product_id, data.stock_quantity)
     audit = AuditService(db)

@@ -34,9 +34,11 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 def _to_order_response(order) -> OrderResponse:
     user_full_name = order.user.full_name if order.user else None
+    courier_name = order.courier.full_name if getattr(order, "courier", None) else None
     facility_name = order.facility.name if order.facility else None
     payload = OrderResponse.model_validate(order).model_dump()
     payload["user_full_name"] = user_full_name
+    payload["courier_name"] = courier_name
     payload["facility_name"] = facility_name
     payload["items"] = [
         {
@@ -214,13 +216,22 @@ async def facility_top_products(
 async def facility_orders(
     facility_id: UUID,
     status: OrderStatus | None = Query(None),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     db=Depends(get_db),
     current_user=Depends(require_super_admin),
 ):
     order_svc = OrderService(db)
-    orders = await order_svc.list_orders(facility_id=facility_id, status=status, skip=skip, limit=limit)
+    orders = await order_svc.list_orders(
+        facility_id=facility_id,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        skip=skip,
+        limit=limit,
+    )
     return [_to_order_response(order) for order in orders]
 
 

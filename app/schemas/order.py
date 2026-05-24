@@ -16,6 +16,14 @@ class RejectOrderRequest(BaseModel):
     reason: str
 
 
+class AssignCourierRequest(BaseModel):
+    courier_id: UUID
+
+
+class DeliveryFailureRequest(BaseModel):
+    reason: str
+
+
 class OrderCreate(BaseModel):
     items: list[OrderItemCreate]
 
@@ -39,6 +47,8 @@ class OrderResponse(BaseModel):
     id: UUID
     user_id: UUID
     user_full_name: str | None = None
+    courier_id: UUID | None = None
+    courier_name: str | None = None
     facility_id: UUID
     facility_name: str | None = None
     status: OrderStatus

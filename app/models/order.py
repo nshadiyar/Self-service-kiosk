@@ -13,13 +13,15 @@ class Order(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    courier_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     facility_id = Column(UUID(as_uuid=True), ForeignKey("facilities.id"), nullable=False)
-    status = Column(Enum(OrderStatus), default="PENDING")
+    status = Column(Enum(OrderStatus), default=OrderStatus.PENDING)
     total_amount = Column(Numeric(12, 2), default=0)
     rejection_reason = Column(String(500))
     created_at = Column(DateTime(timezone=True), server_default="now()")
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    user = relationship("User", back_populates="orders")
+    user = relationship("User", back_populates="orders", foreign_keys=[user_id])
+    courier = relationship("User", back_populates="assigned_orders", foreign_keys=[courier_id])
     facility = relationship("Facility", back_populates="orders")
     items = relationship("OrderItem", back_populates="order")

@@ -1,3 +1,4 @@
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID
 
@@ -5,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.enums import OrderStatus
+from app.core.enums import OrderStatus, UserRole
 from app.core.exceptions import (
     InsufficientFundsError,
     NotFoundError,
@@ -18,6 +19,7 @@ from app.models.product import Product
 from app.models.user import User
 from app.models.wallet import Wallet
 from app.schemas.order import OrderCreate
+from app.services.wallet_service import WalletService
 
 
 class OrderService:
@@ -31,6 +33,7 @@ class OrderService:
             .options(
                 selectinload(Order.items).selectinload(OrderItem.product),
                 selectinload(Order.user),
+                selectinload(Order.courier),
                 selectinload(Order.facility),
             )
         )
@@ -42,22 +45,34 @@ class OrderService:
     async def list_orders(
         self,
         user_id: UUID | None = None,
+        courier_id: UUID | None = None,
         facility_id: UUID | None = None,
         status: OrderStatus | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
         skip: int = 0,
         limit: int = 20,
     ):
         q = select(Order).options(
             selectinload(Order.items).selectinload(OrderItem.product),
             selectinload(Order.user),
+            selectinload(Order.courier),
             selectinload(Order.facility),
         )
         if user_id is not None:
             q = q.where(Order.user_id == user_id)
+        if courier_id is not None:
+            q = q.where(Order.courier_id == courier_id)
         if facility_id is not None:
             q = q.where(Order.facility_id == facility_id)
         if status is not None:
             q = q.where(Order.status == status)
+        if date_from is not None:
+            start_dt = datetime.combine(date_from, time.min).replace(tzinfo=timezone.utc)
+            q = q.where(Order.created_at >= start_dt)
+        if date_to is not None:
+            end_dt = datetime.combine(date_to + timedelta(days=1), time.min).replace(tzinfo=timezone.utc)
+            q = q.where(Order.created_at < end_dt)
         q = q.offset(skip).limit(limit)
         result = await self.db.execute(q)
         return list(result.scalars().all())
@@ -68,22 +83,27 @@ class OrderService:
         facility_id = user.facility_id
 
         total = Decimal(0)
+        wallet_result = await self.db.execute(select(Wallet).where(Wallet.user_id == user.id))
+        wallet = wallet_result.scalar_one_or_none()
+        if not wallet:
+            raise NotFoundError("Кошелек не найден")
+
         items_data = []
         for item in data.items:
             result = await self.db.execute(select(Product).where(Product.id == item.product_id))
             product = result.scalar_one_or_none()
             if not product:
                 raise NotFoundError(f"Товар {item.product_id} не найден")
+            if not product.is_active:
+                raise ValidationError(f"Товар недоступен: {product.name}")
+            if product.facility_id is not None and product.facility_id != facility_id:
+                raise ValidationError(f"Товар недоступен для учреждения: {product.name}")
             if product.stock_quantity < item.quantity:
                 raise ValidationError(f"Недостаточно товара на складе: {product.name}")
             subtotal = product.price * item.quantity
             total += subtotal
-            items_data.append((product, item.quantity, subtotal))
+            items_data.append((product.id, item.quantity, product.price, subtotal))
 
-        wallet_result = await self.db.execute(select(Wallet).where(Wallet.user_id == user.id))
-        wallet = wallet_result.scalar_one_or_none()
-        if not wallet:
-            raise NotFoundError("Кошелек не найден")
         if (wallet.balance or 0) < total:
             raise InsufficientFundsError("Недостаточно средств на кошельке")
         projected_monthly_spent = (wallet.monthly_spent or 0) + total
@@ -94,13 +114,15 @@ class OrderService:
         self.db.add(order)
         await self.db.flush()
 
-        for product, qty, subtotal in items_data:
-            oi = OrderItem(order_id=order.id, product_id=product.id, quantity=qty, unit_price=product.price, subtotal=subtotal)
+        for product_id, qty, unit_price, subtotal in items_data:
+            oi = OrderItem(
+                order_id=order.id,
+                product_id=product_id,
+                quantity=qty,
+                unit_price=unit_price,
+                subtotal=subtotal,
+            )
             self.db.add(oi)
-            product.stock_quantity -= qty
-
-        wallet.balance = (wallet.balance or 0) - total
-        wallet.monthly_spent = (wallet.monthly_spent or 0) + total
         await self.db.flush()
         await self.db.refresh(order)
         return await self.get_by_id(order.id)
@@ -109,6 +131,10 @@ class OrderService:
         order = await self.get_by_id(order_id)
         if order.status != OrderStatus.PENDING:
             raise ValidationError("Заказ нельзя одобрить")
+        await self._validate_order_inventory(order)
+        await self._validate_wallet_for_order(order)
+        wallet_svc = WalletService(self.db)
+        await wallet_svc.apply_order_payment(order.user_id, order.total_amount, order.id)
         order.status = OrderStatus.APPROVED
         await self.db.flush()
         await self.db.refresh(order)
@@ -116,15 +142,119 @@ class OrderService:
 
     async def reject(self, order_id: UUID, reason: str) -> Order:
         order = await self.get_by_id(order_id)
-        if order.status != OrderStatus.PENDING:
+        if order.status not in {OrderStatus.PENDING, OrderStatus.APPROVED}:
             raise ValidationError("Заказ нельзя отклонить")
+        previous_status = order.status
         order.status = OrderStatus.REJECTED
         order.rejection_reason = reason
-        wallet_result = await self.db.execute(select(Wallet).where(Wallet.user_id == order.user_id))
-        wallet = wallet_result.scalar_one_or_none()
-        if wallet:
-            wallet.balance = (wallet.balance or 0) + order.total_amount
-            wallet.monthly_spent = (wallet.monthly_spent or 0) - order.total_amount
+        if self._is_wallet_charged(previous_status):
+            wallet_svc = WalletService(self.db)
+            await wallet_svc.refund_order_payment(order.user_id, order.total_amount, order.id)
         await self.db.flush()
         await self.db.refresh(order)
         return await self.get_by_id(order_id)
+
+    async def start_packing(self, order_id: UUID) -> Order:
+        order = await self.get_by_id(order_id)
+        if order.status != OrderStatus.APPROVED:
+            raise ValidationError("Заказ нельзя взять в сборку")
+        await self._reserve_stock(order)
+        order.status = OrderStatus.PACKING
+        await self.db.flush()
+        await self.db.refresh(order)
+        return await self.get_by_id(order_id)
+
+    async def assign_courier(self, order_id: UUID, courier_id: UUID) -> Order:
+        order = await self.get_by_id(order_id)
+        if order.status != OrderStatus.PACKING:
+            raise ValidationError("Курьера можно назначить только для заказа в сборке")
+
+        courier = await self.db.scalar(select(User).where(User.id == courier_id, User.is_active == True))
+        if courier is None:
+            raise NotFoundError("Курьер не найден")
+        if courier.role != UserRole.COURIER:
+            raise ValidationError("Пользователь не является курьером")
+        if courier.facility_id is not None and courier.facility_id != order.facility_id:
+            raise ValidationError("Курьер не привязан к учреждению заказа")
+
+        order.courier_id = courier.id
+        order.status = OrderStatus.IN_TRANSIT
+        await self.db.flush()
+        await self.db.refresh(order)
+        return await self.get_by_id(order_id)
+
+    async def deliver(self, order_id: UUID) -> Order:
+        order = await self.get_by_id(order_id)
+        if order.status != OrderStatus.IN_TRANSIT:
+            raise ValidationError("Заказ нельзя отметить как доставленный")
+        if order.courier_id is None:
+            raise ValidationError("Для заказа не назначен курьер")
+        order.status = OrderStatus.DELIVERED
+        await self.db.flush()
+        await self.db.refresh(order)
+        return await self.get_by_id(order_id)
+
+    async def fail_delivery(self, order_id: UUID, reason: str) -> Order:
+        order = await self.get_by_id(order_id)
+        if order.status not in {OrderStatus.PACKING, OrderStatus.IN_TRANSIT}:
+            raise ValidationError("Проблему доставки можно отметить только после начала сборки")
+
+        order.status = OrderStatus.FAILED_DELIVERY
+        order.rejection_reason = reason
+        await self._restore_stock(order)
+        if self._is_wallet_charged(order.status):
+            wallet_svc = WalletService(self.db)
+            await wallet_svc.refund_order_payment(order.user_id, order.total_amount, order.id)
+        await self.db.flush()
+        await self.db.refresh(order)
+        return await self.get_by_id(order_id)
+
+    async def _validate_order_inventory(self, order: Order) -> None:
+        for item in order.items:
+            product = item.product
+            if product is None:
+                raise NotFoundError(f"Товар {item.product_id} не найден")
+            if not product.is_active:
+                raise ValidationError(f"Товар недоступен: {product.name}")
+            if product.stock_quantity < item.quantity:
+                raise ValidationError(f"Недостаточно товара на складе: {product.name}")
+
+    async def _validate_wallet_for_order(self, order: Order) -> None:
+        wallet_result = await self.db.execute(select(Wallet).where(Wallet.user_id == order.user_id))
+        wallet = wallet_result.scalar_one_or_none()
+        if not wallet:
+            raise NotFoundError("Кошелек не найден")
+        if (wallet.balance or Decimal(0)) < order.total_amount:
+            raise InsufficientFundsError("Недостаточно средств на кошельке")
+        projected_monthly_spent = (wallet.monthly_spent or Decimal(0)) + order.total_amount
+        if wallet.monthly_limit is not None and projected_monthly_spent > wallet.monthly_limit:
+            raise SpendingLimitExceededError("Превышен месячный лимит расходов")
+
+    async def _reserve_stock(self, order: Order) -> None:
+        for item in order.items:
+            product = item.product
+            if product is None:
+                result = await self.db.execute(select(Product).where(Product.id == item.product_id))
+                product = result.scalar_one_or_none()
+            if product is None:
+                raise NotFoundError(f"Товар {item.product_id} не найден")
+            if product.stock_quantity < item.quantity:
+                raise ValidationError(f"Недостаточно товара на складе: {product.name}")
+            product.stock_quantity -= item.quantity
+
+    async def _restore_stock(self, order: Order) -> None:
+        for item in order.items:
+            result = await self.db.execute(select(Product).where(Product.id == item.product_id))
+            product = result.scalar_one_or_none()
+            if product is not None:
+                product.stock_quantity += item.quantity
+
+    @staticmethod
+    def _is_wallet_charged(status: OrderStatus) -> bool:
+        return status in {
+            OrderStatus.APPROVED,
+            OrderStatus.PACKING,
+            OrderStatus.IN_TRANSIT,
+            OrderStatus.DELIVERED,
+            OrderStatus.FAILED_DELIVERY,
+        }

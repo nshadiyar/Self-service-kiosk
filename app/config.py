@@ -99,6 +99,16 @@ class Settings(BaseSettings):
     face_match_max_liveness_penalty: float = 0.08
     face_login_secondary_face_max_ratio: float = 0.75
 
+    # Feedback / Gmail SMTP
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from_email: str | None = None
+    smtp_use_tls: bool = True
+    feedback_recipient_email: str | None = None
+    feedback_subject_prefix: str = "Жалоба/Предложение"
+
     @property
     def s3_endpoint(self) -> str | None:
         """
