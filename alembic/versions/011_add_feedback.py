@@ -1,7 +1,7 @@
 """add feedback
 
 Revision ID: 011_add_feedback
-Revises: 010_add_audit_logs
+Revises: 010
 Create Date: 2026-05-16
 """
 
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "011_add_feedback"
-down_revision = "010_add_audit_logs"
+down_revision = "010"
 branch_labels = None
 depends_on = None
 
