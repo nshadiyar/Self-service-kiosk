@@ -20,7 +20,7 @@ from app.services.storage_service import MinioStorageService
 from app.services.user_service import UserService
 from app.services.wallet_service import WalletService
 from app.services.audit_service import AuditService
-from app.core.security import require_admin, require_super_admin
+from app.core.security import get_current_user_dep, require_admin, require_super_admin
 from app.schemas.order import OrderResponse
 from app.schemas.wallet import WalletResponse
 
@@ -67,10 +67,18 @@ async def list_users(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     db=Depends(get_db),
-    current_user=Depends(require_admin),
+    current_user=Depends(get_current_user_dep),
 ):
+    if current_user.role == UserRole.WAREHOUSE_MANAGER:
+        if role != UserRole.COURIER:
+            raise AuthorizationError("Начальник склада может просматривать только курьеров")
+    elif current_user.role not in {UserRole.SUPER_ADMIN, UserRole.PRISON_ADMIN}:
+        raise AuthorizationError("Доступ запрещен")
+
     facility_filter = None
-    if current_user.role.value == "PRISON_ADMIN" and current_user.facility_id:
+    if current_user.role == UserRole.WAREHOUSE_MANAGER and current_user.facility_id:
+        facility_filter = current_user.facility_id
+    elif current_user.role.value == "PRISON_ADMIN" and current_user.facility_id:
         facility_filter = current_user.facility_id
     elif facility_id is not None:
         facility_filter = facility_id
