@@ -2,7 +2,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -48,6 +48,7 @@ class OrderService:
         courier_id: UUID | None = None,
         facility_id: UUID | None = None,
         status: OrderStatus | None = None,
+        full_name: str | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
         skip: int = 0,
@@ -67,6 +68,8 @@ class OrderService:
             q = q.where(Order.facility_id == facility_id)
         if status is not None:
             q = q.where(Order.status == status)
+        if full_name is not None and full_name.strip():
+            q = q.join(Order.user).where(User.full_name.ilike(f"%{full_name.strip()}%"))
         if date_from is not None:
             start_dt = datetime.combine(date_from, time.min).replace(tzinfo=timezone.utc)
             q = q.where(Order.created_at >= start_dt)
@@ -211,10 +214,20 @@ class OrderService:
             raise ValidationError("Заказ нельзя отметить как доставленный")
         if order.courier_id is None:
             raise ValidationError("Для заказа не назначен курьер")
-        recipient_employee_name = recipient_employee_name.strip()
+        recipient_employee_name = " ".join(recipient_employee_name.split())
         if not recipient_employee_name:
             raise ValidationError("Необходимо указать ФИО принимающего сотрудника")
-        order.recipient_employee_name = recipient_employee_name
+        recipient_admin = await self.db.scalar(
+            select(User).where(
+                User.role == UserRole.PRISON_ADMIN,
+                User.is_active == True,
+                User.facility_id == order.facility_id,
+                func.lower(User.full_name) == recipient_employee_name.lower(),
+            )
+        )
+        if recipient_admin is None:
+            raise ValidationError("Указанный принимающий сотрудник не найден среди администраторов учреждения")
+        order.recipient_employee_name = recipient_admin.full_name
         order.status = OrderStatus.DELIVERED
         await self.db.flush()
         await self.db.refresh(order)

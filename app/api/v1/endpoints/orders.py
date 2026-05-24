@@ -52,6 +52,8 @@ def _to_order_response(order) -> OrderResponse:
 @router.get("", response_model=list[OrderResponse])
 async def list_orders(
     status: OrderStatus | None = Query(None),
+    facility_id: UUID | None = Query(None),
+    full_name: str | None = Query(None, description="Поиск по ФИО заключённого"),
     date_from: date | None = Query(None),
     date_to: date | None = Query(None),
     skip: int = Query(0, ge=0),
@@ -62,9 +64,10 @@ async def list_orders(
     svc = OrderService(db)
     user_filter = None
     courier_filter = None
-    facility_filter = None
+    facility_filter = facility_id
     if current_user.role == UserRole.INMATE:
         user_filter = current_user.id
+        facility_filter = current_user.facility_id
     elif current_user.role == UserRole.COURIER:
         courier_filter = current_user.id
         facility_filter = current_user.facility_id
@@ -75,6 +78,7 @@ async def list_orders(
         courier_id=courier_filter,
         facility_id=facility_filter,
         status=status,
+        full_name=full_name,
         date_from=date_from,
         date_to=date_to,
         skip=skip,
