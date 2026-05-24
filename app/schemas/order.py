@@ -24,6 +24,10 @@ class DeliveryFailureRequest(BaseModel):
     reason: str
 
 
+class DeliverOrderRequest(BaseModel):
+    recipient_employee_name: str
+
+
 class OrderCreate(BaseModel):
     items: list[OrderItemCreate]
 
@@ -54,6 +58,7 @@ class OrderResponse(BaseModel):
     status: OrderStatus
     total_amount: Decimal
     rejection_reason: str | None
+    recipient_employee_name: str | None = None
     created_at: datetime
     items: list[OrderItemResponse] = []
 

@@ -18,6 +18,7 @@ class Order(Base):
     status = Column(Enum(OrderStatus), default=OrderStatus.PENDING)
     total_amount = Column(Numeric(12, 2), default=0)
     rejection_reason = Column(String(500))
+    recipient_employee_name = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default="now()")
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

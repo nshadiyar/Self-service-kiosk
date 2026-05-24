@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from app.dependencies import get_db
 from app.schemas.order import (
     AssignCourierRequest,
+    DeliverOrderRequest,
     DeliveryFailureRequest,
     OrderCreate,
     OrderResponse,
@@ -204,8 +205,8 @@ async def assign_courier(
     return _to_order_response(order)
 
 
-@router.post("/{order_id}/deliver", response_model=OrderResponse)
-async def deliver_order(
+@router.post("/{order_id}/depart", response_model=OrderResponse)
+async def depart_order(
     order_id: UUID,
     db=Depends(get_db),
     current_user=Depends(require_courier),
@@ -214,14 +215,61 @@ async def deliver_order(
     order = await svc.get_by_id(order_id)
     if current_user.role == UserRole.COURIER and order.courier_id != current_user.id:
         raise AuthorizationError("Доступ запрещен")
-    order = await svc.deliver(order_id)
+    order = await svc.mark_departed(order_id)
+    audit = AuditService(db)
+    await audit.log_event(
+        actor=current_user,
+        action="DEPART_ORDER",
+        entity_type="order",
+        entity_id=str(order.id),
+        summary=f"Курьер выехал с заказом {order.id}",
+        payload_after=_to_order_response(order).model_dump(mode="json"),
+    )
+    return _to_order_response(order)
+
+
+@router.post("/{order_id}/arrive-at-facility", response_model=OrderResponse)
+async def arrive_at_facility(
+    order_id: UUID,
+    db=Depends(get_db),
+    current_user=Depends(require_courier),
+):
+    svc = OrderService(db)
+    order = await svc.get_by_id(order_id)
+    if current_user.role == UserRole.COURIER and order.courier_id != current_user.id:
+        raise AuthorizationError("Доступ запрещен")
+    order = await svc.mark_arrived_at_facility(order_id)
+    audit = AuditService(db)
+    await audit.log_event(
+        actor=current_user,
+        action="ARRIVE_ORDER_AT_FACILITY",
+        entity_type="order",
+        entity_id=str(order.id),
+        summary=f"Курьер прибыл в учреждение с заказом {order.id}",
+        payload_after=_to_order_response(order).model_dump(mode="json"),
+    )
+    return _to_order_response(order)
+
+
+@router.post("/{order_id}/deliver", response_model=OrderResponse)
+async def deliver_order(
+    order_id: UUID,
+    data: DeliverOrderRequest,
+    db=Depends(get_db),
+    current_user=Depends(require_courier),
+):
+    svc = OrderService(db)
+    order = await svc.get_by_id(order_id)
+    if current_user.role == UserRole.COURIER and order.courier_id != current_user.id:
+        raise AuthorizationError("Доступ запрещен")
+    order = await svc.deliver(order_id, data.recipient_employee_name)
     audit = AuditService(db)
     await audit.log_event(
         actor=current_user,
         action="DELIVER_ORDER",
         entity_type="order",
         entity_id=str(order.id),
-        summary=f"Заказ {order.id} доставлен",
+        summary=f"Заказ {order.id} доставлен и передан сотруднику {order.recipient_employee_name}",
         payload_after=_to_order_response(order).model_dump(mode="json"),
     )
     return _to_order_response(order)

@@ -178,17 +178,43 @@ class OrderService:
             raise ValidationError("Курьер не привязан к учреждению заказа")
 
         order.courier_id = courier.id
-        order.status = OrderStatus.IN_TRANSIT
+        order.status = OrderStatus.READY_FOR_SHIPMENT
         await self.db.flush()
         await self.db.refresh(order)
         return await self.get_by_id(order_id)
 
-    async def deliver(self, order_id: UUID) -> Order:
+    async def mark_departed(self, order_id: UUID) -> Order:
         order = await self.get_by_id(order_id)
-        if order.status != OrderStatus.IN_TRANSIT:
+        if order.status != OrderStatus.READY_FOR_SHIPMENT:
+            raise ValidationError("Заказ нельзя отметить как выехавший")
+        if order.courier_id is None:
+            raise ValidationError("Для заказа не назначен курьер")
+        order.status = OrderStatus.OUT_FOR_DELIVERY
+        await self.db.flush()
+        await self.db.refresh(order)
+        return await self.get_by_id(order_id)
+
+    async def mark_arrived_at_facility(self, order_id: UUID) -> Order:
+        order = await self.get_by_id(order_id)
+        if order.status != OrderStatus.OUT_FOR_DELIVERY:
+            raise ValidationError("Заказ нельзя отметить как прибывший в учреждение")
+        if order.courier_id is None:
+            raise ValidationError("Для заказа не назначен курьер")
+        order.status = OrderStatus.ARRIVED_AT_FACILITY
+        await self.db.flush()
+        await self.db.refresh(order)
+        return await self.get_by_id(order_id)
+
+    async def deliver(self, order_id: UUID, recipient_employee_name: str) -> Order:
+        order = await self.get_by_id(order_id)
+        if order.status != OrderStatus.ARRIVED_AT_FACILITY:
             raise ValidationError("Заказ нельзя отметить как доставленный")
         if order.courier_id is None:
             raise ValidationError("Для заказа не назначен курьер")
+        recipient_employee_name = recipient_employee_name.strip()
+        if not recipient_employee_name:
+            raise ValidationError("Необходимо указать ФИО принимающего сотрудника")
+        order.recipient_employee_name = recipient_employee_name
         order.status = OrderStatus.DELIVERED
         await self.db.flush()
         await self.db.refresh(order)
@@ -196,7 +222,13 @@ class OrderService:
 
     async def fail_delivery(self, order_id: UUID, reason: str) -> Order:
         order = await self.get_by_id(order_id)
-        if order.status not in {OrderStatus.PACKING, OrderStatus.IN_TRANSIT}:
+        if order.status not in {
+            OrderStatus.PACKING,
+            OrderStatus.READY_FOR_SHIPMENT,
+            OrderStatus.OUT_FOR_DELIVERY,
+            OrderStatus.ARRIVED_AT_FACILITY,
+            OrderStatus.IN_TRANSIT,
+        }:
             raise ValidationError("Проблему доставки можно отметить только после начала сборки")
 
         order.status = OrderStatus.FAILED_DELIVERY
@@ -254,6 +286,9 @@ class OrderService:
         return status in {
             OrderStatus.APPROVED,
             OrderStatus.PACKING,
+            OrderStatus.READY_FOR_SHIPMENT,
+            OrderStatus.OUT_FOR_DELIVERY,
+            OrderStatus.ARRIVED_AT_FACILITY,
             OrderStatus.IN_TRANSIT,
             OrderStatus.DELIVERED,
             OrderStatus.FAILED_DELIVERY,
