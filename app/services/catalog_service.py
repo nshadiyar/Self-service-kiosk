@@ -9,7 +9,7 @@ from app.models.category import Category
 from app.models.facility import Facility
 from app.models.product import Product
 from app.models.vendor import Vendor
-from app.schemas.catalog import ProductCreate, ProductUpdate
+from app.schemas.catalog import ProductCreate, ProductUpdate, VendorCreate, VendorUpdate
 
 
 class CatalogService:
@@ -99,6 +99,39 @@ class CatalogService:
         if not v:
             raise NotFoundError("Поставщик не найден")
         return v
+
+    async def create_vendor(self, data: VendorCreate) -> Vendor:
+        await self._validate_vendor_refs(category_id=data.category_id)
+        existing_code = await self.db.scalar(select(Vendor.id).where(Vendor.code == data.code))
+        if existing_code is not None:
+            raise ConflictError("Поставщик с таким кодом уже существует")
+        vendor = Vendor(
+            code=data.code,
+            name=data.name,
+            logo_url=data.logo_url,
+            category_id=data.category_id,
+            sort_order=data.sort_order,
+            is_active=True,
+        )
+        self.db.add(vendor)
+        await self.db.flush()
+        await self.db.refresh(vendor)
+        return await self.get_vendor(vendor.id)
+
+    async def update_vendor(self, vendor_id: UUID, data: VendorUpdate) -> Vendor:
+        vendor = await self.get_vendor(vendor_id)
+        await self._validate_vendor_refs(category_id=data.category_id)
+        if data.code is not None:
+            existing_code = await self.db.scalar(select(Vendor.id).where(Vendor.code == data.code))
+            if existing_code is not None and existing_code != vendor.id:
+                raise ConflictError("Поставщик с таким кодом уже существует")
+        for field in ("code", "name", "logo_url", "category_id", "sort_order", "is_active"):
+            value = getattr(data, field)
+            if value is not None:
+                setattr(vendor, field, value)
+        await self.db.flush()
+        await self.db.refresh(vendor)
+        return await self.get_vendor(vendor.id)
 
     async def get_product(self, product_id: UUID) -> Product:
         result = await self.db.execute(
@@ -195,3 +228,13 @@ class CatalogService:
             facility = await self.db.scalar(select(Facility.id).where(Facility.id == facility_id))
             if facility is None:
                 raise ValidationError("Учреждение не найдено")
+
+    async def _validate_vendor_refs(
+        self,
+        *,
+        category_id: UUID | None,
+    ) -> None:
+        if category_id is not None:
+            category = await self.db.scalar(select(Category.id).where(Category.id == category_id))
+            if category is None:
+                raise ValidationError("Категория не найдена")

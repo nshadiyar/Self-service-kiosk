@@ -10,8 +10,10 @@ from app.schemas.catalog import (
     ProductResponse,
     ProductStockUpdate,
     ProductUpdate,
+    VendorCreate,
     VendorDetailResponse,
     VendorResponse,
+    VendorUpdate,
 )
 from app.services.catalog_service import CatalogService
 from app.services.audit_service import AuditService
@@ -29,6 +31,10 @@ def _to_product_response(product) -> ProductResponse:
     payload["vendor_name"] = product.vendor.name if product.vendor else None
     payload["facility_name"] = product.facility.name if product.facility else None
     return ProductResponse(**payload)
+
+
+def _to_vendor_response(vendor) -> VendorResponse:
+    return VendorResponse.model_validate(vendor)
 
 
 def _apply_catalog_write_scope(current_user, data):
@@ -93,6 +99,112 @@ async def get_vendor(
     svc = CatalogService(db)
     vendor = await svc.get_vendor(vendor_id)
     return VendorDetailResponse.model_validate(vendor)
+
+
+@router.post("/vendors", response_model=VendorResponse)
+async def create_vendor(
+    code: str = Form(...),
+    name: str = Form(...),
+    category_id: UUID | None = Form(None),
+    sort_order: int = Form(0),
+    logo_url: str | None = Form(None),
+    file: UploadFile | None = File(None),
+    db=Depends(get_db),
+    current_user=Depends(require_catalog_manager),
+):
+    svc = CatalogService(db)
+    uploaded_logo_url = logo_url
+    if file is not None:
+        if not file.filename:
+            raise ValidationError("Необходимо указать имя файла логотипа")
+        if file.content_type and not file.content_type.startswith("image/"):
+            raise ValidationError("Поддерживается загрузка только изображений")
+        file_bytes = await file.read()
+        storage = MinioStorageService()
+        upload_result = storage.upload_vendor_image(
+            uploader_id=current_user.id,
+            file_bytes=file_bytes,
+            content_type=file.content_type,
+            filename=file.filename,
+        )
+        uploaded_logo_url = upload_result["url"]
+
+    data = VendorCreate.model_validate(
+        {
+            "code": code,
+            "name": name,
+            "logo_url": uploaded_logo_url,
+            "category_id": category_id,
+            "sort_order": sort_order,
+        }
+    )
+    vendor = await svc.create_vendor(data)
+    audit = AuditService(db)
+    await audit.log_event(
+        actor=current_user,
+        action="CREATE_VENDOR",
+        entity_type="vendor",
+        entity_id=str(vendor.id),
+        summary=f"Создан поставщик {vendor.name}",
+        payload_after=_to_vendor_response(vendor).model_dump(mode="json"),
+    )
+    return _to_vendor_response(vendor)
+
+
+@router.patch("/vendors/{vendor_id}", response_model=VendorResponse)
+async def update_vendor(
+    vendor_id: UUID,
+    code: str | None = Form(None),
+    name: str | None = Form(None),
+    category_id: UUID | None = Form(None),
+    sort_order: int | None = Form(None),
+    logo_url: str | None = Form(None),
+    is_active: bool | None = Form(None),
+    file: UploadFile | None = File(None),
+    db=Depends(get_db),
+    current_user=Depends(require_catalog_manager),
+):
+    svc = CatalogService(db)
+    before = await svc.get_vendor(vendor_id)
+    uploaded_logo_url = logo_url
+    if file is not None:
+        if not file.filename:
+            raise ValidationError("Необходимо указать имя файла логотипа")
+        if file.content_type and not file.content_type.startswith("image/"):
+            raise ValidationError("Поддерживается загрузка только изображений")
+        file_bytes = await file.read()
+        storage = MinioStorageService()
+        upload_result = storage.upload_vendor_image(
+            uploader_id=current_user.id,
+            file_bytes=file_bytes,
+            content_type=file.content_type,
+            filename=file.filename,
+        )
+        uploaded_logo_url = upload_result["url"]
+
+    data = VendorUpdate.model_validate(
+        {
+            "code": code,
+            "name": name,
+            "logo_url": uploaded_logo_url,
+            "category_id": category_id,
+            "sort_order": sort_order,
+            "is_active": is_active,
+        }
+    )
+    before_payload = _to_vendor_response(before).model_dump(mode="json")
+    vendor = await svc.update_vendor(vendor_id, data)
+    audit = AuditService(db)
+    await audit.log_event(
+        actor=current_user,
+        action="UPDATE_VENDOR",
+        entity_type="vendor",
+        entity_id=str(vendor.id),
+        summary=f"Обновлен поставщик {vendor.name}",
+        payload_before=before_payload,
+        payload_after=_to_vendor_response(vendor).model_dump(mode="json"),
+    )
+    return _to_vendor_response(vendor)
 
 
 @router.get("/products", response_model=list[ProductResponse])

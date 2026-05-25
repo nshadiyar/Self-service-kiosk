@@ -37,6 +37,23 @@ class VendorDetailResponse(VendorResponse):
     products: list[VendorProductResponse] = []
 
 
+class VendorCreate(BaseModel):
+    code: str
+    name: str
+    logo_url: str | None = None
+    category_id: UUID | None = None
+    sort_order: int = 0
+
+
+class VendorUpdate(BaseModel):
+    code: str | None = None
+    name: str | None = None
+    logo_url: str | None = None
+    category_id: UUID | None = None
+    sort_order: int | None = None
+    is_active: bool | None = None
+
+
 class CategoryResponse(BaseModel):
     id: UUID
     name: str

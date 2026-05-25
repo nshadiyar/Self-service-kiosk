@@ -117,6 +117,48 @@ class MinioStorageService:
             "url": self.build_public_url(object_key, bucket_name=bucket_name),
         }
 
+    def upload_vendor_image(
+        self,
+        *,
+        uploader_id: UUID,
+        file_bytes: bytes,
+        content_type: str | None = None,
+        filename: str | None = None,
+    ) -> dict[str, str]:
+        bucket_name = settings.minio_vendor_bucket_name
+        if not bucket_name:
+            raise ValidationError("Не настроено имя хранилища для фото поставщиков")
+        if not file_bytes:
+            raise ValidationError("Загруженный файл пустой")
+
+        normalized_content_type = content_type or "application/octet-stream"
+        if not normalized_content_type.startswith("image/"):
+            raise ValidationError("Поддерживается загрузка только изображений")
+
+        self._ensure_bucket_exists(bucket_name)
+        object_key = self._build_vendor_object_key(
+            uploader_id=uploader_id,
+            filename=filename,
+            content_type=normalized_content_type,
+        )
+
+        payload = BytesIO(file_bytes)
+        try:
+            self.client.put_object(
+                bucket_name,
+                object_key,
+                payload,
+                length=len(file_bytes),
+                content_type=normalized_content_type,
+            )
+        except (S3Error, MinioException, Exception) as exc:
+            raise ValidationError(f"Ошибка загрузки фото поставщика в MinIO: {exc}") from exc
+
+        return {
+            "object_key": object_key,
+            "url": self.build_public_url(object_key, bucket_name=bucket_name),
+        }
+
     def download_object(self, object_key: str) -> bytes:
         try:
             response = self.client.get_object(self.bucket_name, object_key)
@@ -176,6 +218,15 @@ class MinioStorageService:
             guessed = guess_extension(content_type.split(";")[0].strip())
             extension = guessed or ".bin"
         return f"products/{uploader_id}/{uuid4().hex}{extension}"
+
+    def _build_vendor_object_key(self, *, uploader_id: UUID, filename: str | None, content_type: str) -> str:
+        extension = ""
+        if filename and "." in filename:
+            extension = "." + filename.rsplit(".", 1)[-1].lower()
+        if not extension:
+            guessed = guess_extension(content_type.split(";")[0].strip())
+            extension = guessed or ".bin"
+        return f"vendors/{uploader_id}/{uuid4().hex}{extension}"
 
     def _ensure_bucket_exists(self, bucket_name: str) -> None:
         try:
