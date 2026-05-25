@@ -9,6 +9,7 @@ from app.config import settings
 from app.core.enums import FeedbackDeliveryStatus, FeedbackType, UserRole
 from app.core.exceptions import AuthorizationError, BromartException, NotFoundError, ValidationError
 from app.models.feedback import Feedback
+from app.models.facility import Facility
 from app.models.user import User
 from app.schemas.feedback import FeedbackCreate
 from app.services.email_service import EmailService
@@ -32,6 +33,7 @@ class FeedbackService:
 
     async def create(self, current_user: User, data: FeedbackCreate) -> Feedback:
         recipient_email = await self._resolve_feedback_recipient_email()
+        facility_name = await self._resolve_facility_name(current_user.facility_id)
 
         feedback = Feedback(
             user_id=current_user.id,
@@ -46,7 +48,11 @@ class FeedbackService:
         await self.db.flush()
 
         email_subject = f"{settings.feedback_subject_prefix}: {self._type_label(data.type)}"
-        email_body = self._build_email_body(current_user=current_user, data=data)
+        email_body = self._build_email_body(
+            current_user=current_user,
+            data=data,
+            facility_name=facility_name,
+        )
 
         try:
             await self.email_service.send_feedback_email(
@@ -78,6 +84,13 @@ class FeedbackService:
         if settings.feedback_recipient_email:
             return settings.feedback_recipient_email
         raise ValidationError("Не найден активный SUPER_ADMIN для получения обращений")
+
+    async def _resolve_facility_name(self, facility_id: UUID | None) -> str:
+        if facility_id is None:
+            return "Не указано"
+        result = await self.db.execute(select(Facility.name).where(Facility.id == facility_id))
+        facility_name = result.scalar_one_or_none()
+        return facility_name or "Не указано"
 
     async def list_my(self, current_user: User, skip: int = 0, limit: int = 20) -> list[Feedback]:
         result = await self.db.execute(
@@ -131,8 +144,7 @@ class FeedbackService:
     def _type_label(feedback_type: FeedbackType) -> str:
         return "Жалоба" if feedback_type == FeedbackType.COMPLAINT else "Предложение"
 
-    def _build_email_body(self, *, current_user: User, data: FeedbackCreate) -> str:
-        facility_name = current_user.facility.name if getattr(current_user, "facility", None) else "Не указано"
+    def _build_email_body(self, *, current_user: User, data: FeedbackCreate, facility_name: str) -> str:
         return (
             f"Тип обращения: {self._type_label(data.type)}\n"
             f"Пользователь: {current_user.full_name}\n"
