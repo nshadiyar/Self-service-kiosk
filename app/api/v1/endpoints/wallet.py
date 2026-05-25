@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import JSONResponse
 
 from app.dependencies import get_db
 from app.services.user_service import UserService
@@ -52,7 +53,15 @@ async def top_up(
         summary=f"Пополнен кошелек пользователя {data.user_id}",
         payload_after={"user_id": str(data.user_id), "amount": float(data.amount)},
     )
-    return WalletResponse.model_validate(wallet)
+    wallet_payload = WalletResponse.model_validate(wallet).model_dump(mode="json")
+    monthly_limit = wallet_payload.get("monthly_limit")
+    return JSONResponse(
+        content={
+            "success": True,
+            "data": wallet_payload,
+            "message": f"Кошелек пополнен. Месячный лимит заключенного: {monthly_limit} ₸",
+        }
+    )
 
 
 @router.get("/inmates", response_model=list[InmateWalletResponse])

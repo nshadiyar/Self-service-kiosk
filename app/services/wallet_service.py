@@ -5,7 +5,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import SPENDING_LIMITS, SecurityRegime, TransactionType, UserRole
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import NotFoundError, ValidationError
 from app.models.security_regime_limit import SecurityRegimeLimit
 from app.models.facility import Facility
 from app.models.user import User
@@ -46,6 +46,11 @@ class WalletService:
 
     async def top_up(self, user_id: UUID, amount: Decimal) -> Wallet:
         wallet = await self.get_by_user_id(user_id)
+        monthly_limit = wallet.monthly_limit
+        if monthly_limit is not None and amount > monthly_limit:
+            raise ValidationError(
+                f"Сумма пополнения не может превышать месячный лимит заключенного: {float(monthly_limit)} ₸"
+            )
         wallet.balance = (wallet.balance or Decimal(0)) + amount
         tx = WalletTransaction(
             wallet_id=wallet.id,
