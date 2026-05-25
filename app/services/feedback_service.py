@@ -31,8 +31,7 @@ class FeedbackService:
         return feedback
 
     async def create(self, current_user: User, data: FeedbackCreate) -> Feedback:
-        if not settings.feedback_recipient_email:
-            raise ValidationError("Адрес получателя обращений не настроен")
+        recipient_email = await self._resolve_feedback_recipient_email()
 
         feedback = Feedback(
             user_id=current_user.id,
@@ -40,7 +39,7 @@ class FeedbackService:
             type=data.type.value,
             subject=data.subject.strip(),
             message=data.message.strip(),
-            recipient_email=settings.feedback_recipient_email,
+            recipient_email=recipient_email,
             delivery_status=FeedbackDeliveryStatus.PENDING.value,
         )
         self.db.add(feedback)
@@ -51,7 +50,7 @@ class FeedbackService:
 
         try:
             await self.email_service.send_feedback_email(
-                to_email=settings.feedback_recipient_email,
+                to_email=recipient_email,
                 subject=email_subject,
                 body=email_body,
             )
@@ -66,6 +65,19 @@ class FeedbackService:
 
         await self.db.flush()
         return await self.get_by_id(feedback.id)
+
+    async def _resolve_feedback_recipient_email(self) -> str:
+        result = await self.db.execute(
+            select(User.email)
+            .where(User.role == UserRole.SUPER_ADMIN, User.is_active == True)
+            .order_by(User.created_at.asc())
+        )
+        emails = [email for email in result.scalars().all() if email]
+        if emails:
+            return ", ".join(emails)
+        if settings.feedback_recipient_email:
+            return settings.feedback_recipient_email
+        raise ValidationError("Не найден активный SUPER_ADMIN для получения обращений")
 
     async def list_my(self, current_user: User, skip: int = 0, limit: int = 20) -> list[Feedback]:
         result = await self.db.execute(
