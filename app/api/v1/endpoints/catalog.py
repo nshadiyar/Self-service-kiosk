@@ -55,7 +55,8 @@ def _ensure_existing_product_write_scope(current_user, product, data=None) -> No
     if product.facility_id not in {None, current_user.facility_id}:
         raise AuthorizationError("Доступ запрещен")
     if data is not None and "facility_id" in getattr(data, "model_fields_set", set()):
-        raise AuthorizationError("Начальник склада не может менять привязку товара к учреждению")
+        if data.facility_id != product.facility_id:
+            raise AuthorizationError("Начальник склада не может менять привязку товара к учреждению")
 
 
 @router.get("/categories", response_model=list[CategoryResponse])
