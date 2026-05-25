@@ -74,7 +74,7 @@ class FeedbackService:
         )
         emails = [email for email in result.scalars().all() if email]
         if emails:
-            return ", ".join(emails)
+            return emails[0]
         if settings.feedback_recipient_email:
             return settings.feedback_recipient_email
         raise ValidationError("Не найден активный SUPER_ADMIN для получения обращений")
