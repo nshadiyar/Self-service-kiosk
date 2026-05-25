@@ -81,6 +81,7 @@ class Settings(BaseSettings):
     minio_root_user: str | None = None
     minio_root_password: str | None = None
     minio_bucket_name: str = "inmate-photos"
+    minio_product_bucket_name: str = "product-photo"
     face_provider_name: str = "insightface_arcface_v1"
     face_model_name: str = "buffalo_l"
     face_match_threshold: float = 0.70

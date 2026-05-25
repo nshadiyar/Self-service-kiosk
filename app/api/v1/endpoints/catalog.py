@@ -1,6 +1,7 @@
+from decimal import Decimal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 
 from app.dependencies import get_db
 from app.schemas.catalog import (
@@ -14,8 +15,9 @@ from app.schemas.catalog import (
 )
 from app.services.catalog_service import CatalogService
 from app.services.audit_service import AuditService
+from app.services.storage_service import MinioStorageService
 from app.core.enums import UserRole
-from app.core.exceptions import AuthorizationError
+from app.core.exceptions import AuthorizationError, ValidationError
 from app.core.security import get_current_user_dep, require_catalog_manager
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
@@ -149,11 +151,47 @@ async def get_product(
 
 @router.post("/products", response_model=ProductResponse)
 async def create_product(
-    data: ProductCreate,
+    name: str = Form(...),
+    description: str | None = Form(None),
+    category_id: UUID = Form(...),
+    facility_id: UUID | None = Form(None),
+    vendor_id: UUID | None = Form(None),
+    price: Decimal = Form(...),
+    stock_quantity: int = Form(0),
+    image_url: str | None = Form(None),
+    file: UploadFile | None = File(None),
     db=Depends(get_db),
     current_user=Depends(require_catalog_manager),
 ):
     svc = CatalogService(db)
+    uploaded_image_url = image_url
+    if file is not None:
+        if not file.filename:
+            raise ValidationError("Необходимо указать имя файла изображения")
+        if file.content_type and not file.content_type.startswith("image/"):
+            raise ValidationError("Поддерживается загрузка только изображений")
+        file_bytes = await file.read()
+        storage = MinioStorageService()
+        upload_result = storage.upload_product_image(
+            uploader_id=current_user.id,
+            file_bytes=file_bytes,
+            content_type=file.content_type,
+            filename=file.filename,
+        )
+        uploaded_image_url = upload_result["url"]
+
+    data = ProductCreate.model_validate(
+        {
+            "name": name,
+            "description": description,
+            "category_id": category_id,
+            "facility_id": facility_id,
+            "vendor_id": vendor_id,
+            "price": price,
+            "stock_quantity": stock_quantity,
+            "image_url": uploaded_image_url,
+        }
+    )
     data = _apply_catalog_write_scope(current_user, data)
     product = await svc.create_product(data)
     audit = AuditService(db)
