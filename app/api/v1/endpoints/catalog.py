@@ -83,11 +83,12 @@ async def get_category(
 @router.get("/vendors", response_model=list[VendorResponse])
 async def list_vendors(
     category_id: UUID | None = Query(None),
+    is_active: bool | None = Query(True),
     db=Depends(get_db),
     current_user=Depends(get_current_user_dep),
 ):
     svc = CatalogService(db)
-    vendors = await svc.list_vendors(category_id=category_id)
+    vendors = await svc.list_vendors(category_id=category_id, is_active=is_active)
     return [VendorResponse.model_validate(v) for v in vendors]
 
 

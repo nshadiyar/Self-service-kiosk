@@ -82,8 +82,14 @@ class CatalogService:
         result = await self.db.execute(q)
         return list(result.scalars().all())
 
-    async def list_vendors(self, category_id: UUID | None = None) -> list[Vendor]:
-        q = select(Vendor).where(Vendor.is_active == True).order_by(Vendor.sort_order)
+    async def list_vendors(
+        self,
+        category_id: UUID | None = None,
+        is_active: bool | None = True,
+    ) -> list[Vendor]:
+        q = select(Vendor).order_by(Vendor.sort_order)
+        if is_active is not None:
+            q = q.where(Vendor.is_active == is_active)
         if category_id is not None:
             q = q.where(Vendor.category_id == category_id)
         result = await self.db.execute(q)
