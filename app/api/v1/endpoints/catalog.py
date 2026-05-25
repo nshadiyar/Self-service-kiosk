@@ -321,12 +321,50 @@ async def create_product(
 @router.patch("/products/{product_id}", response_model=ProductResponse)
 async def update_product(
     product_id: UUID,
-    data: ProductUpdate,
+    name: str | None = Form(None),
+    description: str | None = Form(None),
+    category_id: UUID | None = Form(None),
+    facility_id: UUID | None = Form(None),
+    vendor_id: UUID | None = Form(None),
+    price: Decimal | None = Form(None),
+    stock_quantity: int | None = Form(None),
+    image_url: str | None = Form(None),
+    is_active: bool | None = Form(None),
+    file: UploadFile | None = File(None),
     db=Depends(get_db),
     current_user=Depends(require_catalog_manager),
 ):
     svc = CatalogService(db)
     before = await svc.get_product(product_id)
+    uploaded_image_url = image_url
+    if file is not None:
+        if not file.filename:
+            raise ValidationError("Необходимо указать имя файла изображения")
+        if file.content_type and not file.content_type.startswith("image/"):
+            raise ValidationError("Поддерживается загрузка только изображений")
+        file_bytes = await file.read()
+        storage = MinioStorageService()
+        upload_result = storage.upload_product_image(
+            uploader_id=current_user.id,
+            file_bytes=file_bytes,
+            content_type=file.content_type,
+            filename=file.filename,
+        )
+        uploaded_image_url = upload_result["url"]
+
+    data = ProductUpdate.model_validate(
+        {
+            "name": name,
+            "description": description,
+            "category_id": category_id,
+            "facility_id": facility_id,
+            "vendor_id": vendor_id,
+            "price": price,
+            "stock_quantity": stock_quantity,
+            "image_url": uploaded_image_url,
+            "is_active": is_active,
+        }
+    )
     _ensure_existing_product_write_scope(current_user, before, data)
     before_payload = _to_product_response(before).model_dump(mode="json")
     product = await svc.update_product(product_id, data)
