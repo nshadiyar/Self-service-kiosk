@@ -139,6 +139,13 @@ class CatalogService:
         await self.db.refresh(vendor)
         return await self.get_vendor(vendor.id)
 
+    async def deactivate_vendor(self, vendor_id: UUID) -> Vendor:
+        vendor = await self.get_vendor(vendor_id)
+        vendor.is_active = False
+        await self.db.flush()
+        await self.db.refresh(vendor)
+        return await self.get_vendor(vendor.id)
+
     async def get_product(self, product_id: UUID) -> Product:
         result = await self.db.execute(
             select(Product)

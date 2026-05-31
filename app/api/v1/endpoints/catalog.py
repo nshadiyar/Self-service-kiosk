@@ -209,6 +209,29 @@ async def update_vendor(
     return _to_vendor_response(vendor)
 
 
+@router.delete("/vendors/{vendor_id}", response_model=VendorResponse)
+async def delete_vendor(
+    vendor_id: UUID,
+    db=Depends(get_db),
+    current_user=Depends(require_catalog_manager),
+):
+    svc = CatalogService(db)
+    before = await svc.get_vendor(vendor_id)
+    before_payload = _to_vendor_response(before).model_dump(mode="json")
+    vendor = await svc.deactivate_vendor(vendor_id)
+    audit = AuditService(db)
+    await audit.log_event(
+        actor=current_user,
+        action="DELETE_VENDOR",
+        entity_type="vendor",
+        entity_id=str(vendor.id),
+        summary=f"Деактивирован поставщик {vendor.name}",
+        payload_before=before_payload,
+        payload_after=_to_vendor_response(vendor).model_dump(mode="json"),
+    )
+    return _to_vendor_response(vendor)
+
+
 @router.get("/products", response_model=list[ProductResponse])
 async def list_products(
     category_id: UUID | None = Query(None),

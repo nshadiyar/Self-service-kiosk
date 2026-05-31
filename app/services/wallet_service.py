@@ -45,11 +45,18 @@ class WalletService:
         return wallet
 
     async def top_up(self, user_id: UUID, amount: Decimal) -> Wallet:
+        user_result = await self.db.execute(
+            select(User).where(User.id == user_id)
+        )
+        user = user_result.scalar_one_or_none()
+        if not user:
+            raise NotFoundError("Пользователь не найден")
         wallet = await self.get_by_user_id(user_id)
-        monthly_limit = wallet.monthly_limit
-        if monthly_limit is not None and amount > monthly_limit:
+        effective_monthly_limit = await self.get_monthly_limit_for_regime(user.security_regime)
+        wallet.monthly_limit = effective_monthly_limit
+        if amount > effective_monthly_limit:
             raise ValidationError(
-                f"Сумма пополнения не может превышать месячный лимит заключенного: {float(monthly_limit)} ₸"
+                f"Сумма пополнения не может превышать месячный лимит заключенного: {float(effective_monthly_limit)} ₸"
             )
         wallet.balance = (wallet.balance or Decimal(0)) + amount
         tx = WalletTransaction(
