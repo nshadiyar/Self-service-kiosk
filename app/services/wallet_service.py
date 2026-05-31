@@ -54,11 +54,13 @@ class WalletService:
         wallet = await self.get_by_user_id(user_id)
         effective_monthly_limit = await self.get_monthly_limit_for_regime(user.security_regime)
         wallet.monthly_limit = effective_monthly_limit
-        if amount > effective_monthly_limit:
+        current_balance = wallet.balance or Decimal(0)
+        new_balance = current_balance + amount
+        if new_balance > effective_monthly_limit:
             raise ValidationError(
-                f"Сумма пополнения не может превышать месячный лимит заключенного: {float(effective_monthly_limit)} ₸"
+                f"Баланс после пополнения не может превышать месячный лимит заключенного: {float(effective_monthly_limit)} ₸"
             )
-        wallet.balance = (wallet.balance or Decimal(0)) + amount
+        wallet.balance = new_balance
         tx = WalletTransaction(
             wallet_id=wallet.id,
             type=TransactionType.TOP_UP,

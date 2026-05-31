@@ -59,7 +59,7 @@ async def top_up(
         content={
             "success": True,
             "data": wallet_payload,
-            "message": f"Кошелек пополнен. Месячный лимит заключенного: {monthly_limit} ₸",
+            "message": f"Кошелек пополнен. Баланс не может превышать месячный лимит заключенного: {monthly_limit} ₸",
         }
     )
 
