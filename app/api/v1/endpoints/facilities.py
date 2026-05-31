@@ -22,6 +22,9 @@ async def list_facilities(
     if current_user.role not in {UserRole.SUPER_ADMIN, UserRole.PRISON_ADMIN, UserRole.WAREHOUSE_MANAGER}:
         raise AuthorizationError("Доступ запрещен")
     svc = FacilityService(db)
+    if current_user.role in {UserRole.PRISON_ADMIN, UserRole.WAREHOUSE_MANAGER} and current_user.facility_id:
+        facility = await svc.get_by_id(current_user.facility_id)
+        return [FacilityResponse.model_validate(facility)]
     facilities = await svc.list_facilities(skip=skip, limit=limit)
     return [FacilityResponse.model_validate(f) for f in facilities]
 
@@ -29,6 +32,12 @@ async def list_facilities(
 @router.get("/{facility_id}", response_model=FacilityResponse)
 async def get_facility(facility_id: UUID, db=Depends(get_db), current_user=Depends(get_current_user_dep)):
     if current_user.role not in {UserRole.SUPER_ADMIN, UserRole.PRISON_ADMIN, UserRole.WAREHOUSE_MANAGER}:
+        raise AuthorizationError("Доступ запрещен")
+    if (
+        current_user.role in {UserRole.PRISON_ADMIN, UserRole.WAREHOUSE_MANAGER}
+        and current_user.facility_id is not None
+        and facility_id != current_user.facility_id
+    ):
         raise AuthorizationError("Доступ запрещен")
     svc = FacilityService(db)
     facility = await svc.get_by_id(facility_id)

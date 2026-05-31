@@ -147,8 +147,15 @@ async def create_inmate_with_photo(
     monthly_limit: Decimal | None = Form(None, ge=0),
     file: UploadFile = File(...),
     db=Depends(get_db),
-    current_user=Depends(require_super_admin),
+    current_user=Depends(require_admin),
 ):
+    if current_user.role == UserRole.PRISON_ADMIN:
+        if current_user.facility_id is None:
+            raise AuthorizationError("У администратора не указано учреждение")
+        if facility_id is not None and facility_id != current_user.facility_id:
+            raise AuthorizationError("Нельзя создать заключенного в другом учреждении")
+        facility_id = current_user.facility_id
+
     payload = UserCreate.model_validate(
         {
             "email": email,
