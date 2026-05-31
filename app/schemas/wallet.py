@@ -24,7 +24,7 @@ class WalletResponse(BaseModel):
 
 class TopUpRequest(BaseModel):
     user_id: UUID
-    amount: Decimal
+    amount: Decimal = Field(ge=1000)
 
 
 class InmateWalletResponse(BaseModel):
