@@ -8,6 +8,7 @@ from app.core.enums import OrderStatus, SecurityRegime, UserRole
 from app.dependencies import get_db
 from app.schemas.user import (
     InmateCreateWithPhotoResponse,
+    InmateProfileResponse,
     InmateSettingsUpdate,
     UserCreate,
     UserUpdate,
@@ -20,7 +21,7 @@ from app.services.storage_service import MinioStorageService
 from app.services.user_service import UserService
 from app.services.wallet_service import WalletService
 from app.services.audit_service import AuditService
-from app.core.security import get_current_user_dep, require_admin, require_super_admin
+from app.core.security import get_current_user_dep, require_admin, require_inmate, require_super_admin
 from app.schemas.order import OrderResponse
 from app.schemas.wallet import WalletResponse
 
@@ -33,6 +34,16 @@ def _to_user_response(user) -> UserResponse:
     payload["facility_name"] = facility_name
     payload["monthly_limit"] = user.wallet.monthly_limit if getattr(user, "wallet", None) else None
     return UserResponse(**payload)
+
+
+def _to_inmate_profile_response(user) -> InmateProfileResponse:
+    return InmateProfileResponse(
+        id=user.id,
+        iin=user.iin,
+        full_name=user.full_name,
+        facility_id=user.facility_id,
+        facility_name=user.facility.name if user.facility else None,
+    )
 
 
 def _to_order_response(order) -> OrderResponse:
@@ -192,6 +203,16 @@ async def create_inmate_with_photo(
         payload_after=InmateCreateWithPhotoResponse(**response).model_dump(mode="json"),
     )
     return InmateCreateWithPhotoResponse(**response)
+
+
+@router.get("/me/profile", response_model=InmateProfileResponse)
+async def get_my_inmate_profile(
+    db=Depends(get_db),
+    current_user=Depends(require_inmate),
+):
+    svc = UserService(db)
+    user = await svc.get_by_id(current_user.id)
+    return _to_inmate_profile_response(user)
 
 
 @router.get("/{user_id}", response_model=UserResponse)

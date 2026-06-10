@@ -86,6 +86,14 @@ class InmateCreateWithPhotoResponse(UserResponse):
     biometric_provider: str
 
 
+class InmateProfileResponse(BaseModel):
+    id: UUID
+    iin: str | None
+    full_name: str
+    facility_id: UUID | None
+    facility_name: str | None = None
+
+
 class InmateSettingsUpdate(BaseModel):
     security_regime: SecurityRegime | None = None
     monthly_limit: Decimal | None = Field(default=None, ge=0)
