@@ -43,6 +43,8 @@ def _to_inmate_profile_response(user) -> InmateProfileResponse:
         full_name=user.full_name,
         facility_id=user.facility_id,
         facility_name=user.facility.name if user.facility else None,
+        transfer_date=user.transfer_date,
+        release_date=user.release_date,
     )
 
 

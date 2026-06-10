@@ -92,6 +92,8 @@ class InmateProfileResponse(BaseModel):
     full_name: str
     facility_id: UUID | None
     facility_name: str | None = None
+    transfer_date: date | None
+    release_date: date | None
 
 
 class InmateSettingsUpdate(BaseModel):
